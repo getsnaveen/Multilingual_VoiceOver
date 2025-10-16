@@ -1,0 +1,30 @@
+# Core dependencies
+streamlit==1.45.1
+
+# ML/Whisper
+torch==2.3.1              # CPU-only: pip install torch --index-url https://download.pytorch.org/whl/cpu
+faster-whisper==1.1.1
+
+# Media handling
+audio-extract==0.7.0
+ffmpeg-python==0.2.0
+ffsubsync==0.4.29
+imageio==2.37.0
+moviepy==2.1.2
+
+# Utilities
+natsort==8.4.0
+openai==1.82.0
+pandas==2.2.3
+pydantic==2.11.5
+pydantic-settings==2.9.1
+python-dotenv==1.1.0
+pysrt==1.1.2
+requests==2.32.3
+urllib3==2.4.0
+
+# Google AI/Cloud
+google-genai==1.21.1          # (latest stable for `from google import genai`)
+google-cloud-translate==3.20.2
+google-cloud-storage==3.1.1
+google-cloud-speech==2.33.0
