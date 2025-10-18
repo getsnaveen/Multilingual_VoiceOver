@@ -29,7 +29,8 @@ class SingletonLogger:
         # File handler
         if log_to_file:
             # Use absolute log directory to ensure Docker volume works
-            log_dir = Path(os.getenv("LOG_DIR", "/app/logs"))
+            # log_dir = Path(os.getenv("LOG_DIR", "/app/logs"))
+            log_dir = Path(__file__).resolve().parent.parent / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             file_handler = logging.FileHandler(log_dir / f"{service_name}.log")
             file_handler.setFormatter(formatter)

@@ -11,7 +11,7 @@ from utils.config import AppSettings
 from utils.language_const import LANGUAGES
 from natsort import natsorted
 from shutil import rmtree
-from evalutions.evalution_new import TranslationEvaluator
+from evalutions.evalution import TranslationEvaluator
 
 class TranscriberApp:
     def __init__(self, settings: AppSettings):

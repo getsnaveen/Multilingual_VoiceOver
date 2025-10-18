@@ -1,6 +1,6 @@
 # Core dependencies
 streamlit==1.45.1
-
+boto3  == 1.40.55
 # ML/Whisper
 torch==2.3.1              # CPU-only: pip install torch --index-url https://download.pytorch.org/whl/cpu
 faster-whisper==1.1.1

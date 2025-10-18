@@ -1,0 +1,314 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>NimixIT — Song Marker</title>
+<style>
+  :root { --bg:#0b0b0b; --fg:#eee; --muted:#bbb; --acc:#3aa3ff; --err:#ff5577; --ok:#26d07c; }
+  html, body { height:100%; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); margin:0; }
+  .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+  .brandbar { background:#fff; color:#111; border-radius:12px; padding:10px 14px; display:flex; gap:12px; align-items:center; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,.06) }
+  .brandbar img { height:36px; width:auto; border-radius:6px }
+  .brand-title { font-weight:700; font-size:16px }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0 }
+  .panel { border:1px solid #222; background:#151515; border-radius:12px; padding:12px; margin:10px 0 }
+  button { background:#1f2630; color:#e2e8f0; border:1px solid #2b3440; padding:8px 12px; border-radius:10px; cursor:pointer }
+  button:hover { border-color:#3aa3ff }
+  button.primary { background:#0d4d96; border-color:#3aa3ff }
+  button.danger { background:#4b0d18; border-color:#ff5577 }
+  input[type="text"], input[type="number"] { background:#0e1116; color:#ddd; border:1px solid #2b3440; padding:8px; border-radius:8px; min-width:240px }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace }
+  table { width:100%; border-collapse: collapse }
+  th, td { border-bottom:1px solid #222; padding:6px 8px; text-align:left; font-size:13px }
+  th { color:#cbd5e1; background:#13161b; position:sticky; top:0 }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#19324e; color:#a7d0ff }
+  .small { color:#aaa; font-size:12px }
+  .kbd { padding:2px 6px; border-radius:6px; background:#0d1420; border:1px solid #2b3440; margin-right:4px }
+  .footer { margin-top:16px; color:#bbb; font-size:12px; text-align:center }
+  .ok  { color:#26d07c }
+  .err { color:#ff5577 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brandbar">
+    <img id="brandLogo" alt="NimixIT logo"/>
+    <div class="brand-title">NimixIT AI Solutions — Song Marker</div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <input id="movieName" class="mono" placeholder="Movie filename (e.g., movie.mp4)" />
+      <input id="inFile" type="file" accept="video/*" />
+      <button id="loadBtn" class="primary">Load</button>
+      <span id="loadMsg" class="small"></span>
+    </div>
+    <video id="vid" width="100%" controls preload="metadata" style="border-radius:12px; outline:1px solid #222;"></video>
+    <div class="row">
+      <div>⏱️ <span id="cur" class="mono">00:00:00.000</span> / <span id="dur" class="mono">--:--:--.---</span></div>
+      <div class="small">Use video controls or keyboard.</div>
+    </div>
+    <div class="row">
+      <button id="markSongStart">Mark SONG start (<span class="kbd">S</span>)</button>
+      <button id="markSongEnd">Mark SONG end (<span class="kbd">E</span>)</button>
+      <button id="undoBtn" class="danger">Undo (<span class="kbd">U</span>)</button>
+      <button id="togglePlay">Play/Pause (<span class="kbd">Space</span>)</button>
+      <span id="markMsg" class="small"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0">🎼 SONG spans</h3>
+    <div class="small">Click start before the song, and end right after the song. Repeat.</div>
+    <table>
+      <thead><tr><th>#</th><th>Start</th><th>End</th><th>Dur (s)</th><th>Actions</th></tr></thead>
+      <tbody id="songBody"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0">🗂️ Labeled chunks (voice/song)</h3>
+    <div class="row">
+      <button id="buildChunks" class="primary">Build full timeline chunks (<span class="kbd">V</span>)</button>
+      <span id="buildMsg" class="small"></span>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Label</th><th>Start</th><th>End</th><th>Dur (s)</th></tr></thead>
+      <tbody id="chunkBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Totals panel -->
+  <div class="panel">
+    <h3 style="margin-top:0">⏱️ Totals (live)</h3>
+    <div class="row">
+      <input id="manualDuration" type="number" step="0.1" min="0" placeholder="Optional: Full video duration in seconds" />
+      <button id="calcTotals" class="primary">Calculate totals</button>
+      <span id="totalsMsg" class="small"></span>
+    </div>
+    <div class="row">
+      <div class="mono">🎵 SONG total: <span id="songTotal">0.00</span> s</div>
+      <div class="mono">🗣️ VOICE total: <span id="voiceTotal">0.00</span> s</div>
+      <div class="mono">⏲️ OVERALL: <span id="overallTotal">0.00</span> s</div>
+    </div>
+    <div class="row">
+      <input id="totalsFilename" class="mono" placeholder="totals.json" />
+      <button id="downloadTotals" title="Export totals JSON">Export totals JSON</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0">⬇️ Export</h3>
+    <div class="row">
+      <button id="dlSongJson">Download song_spans.json</button>
+      <button id="dlLabeledJson">Download labeled_chunks.json</button>
+      <button id="dlFfmpegSh">Download cut_chunks.sh</button>
+    </div>
+  </div>
+
+  <div class="footer" id="brandFooter">© 2025 NimixIT Solutions Pvt Ltd. All Rights Reserved.</div>
+</div>
+
+<script>
+document.getElementById("brandLogo").src = "__LOGO_DATA_URL__";
+
+const $ = (id) => document.getElementById(id);
+const vid = $("vid"), cur=$("cur"), dur=$("dur"), movieName=$("movieName"), inFile=$("inFile"), loadBtn=$("loadBtn"), loadMsg=$("loadMsg"), togglePlay=$("togglePlay");
+const songBody=$("songBody"), chunkBody=$("chunkBody"), markSongStart=$("markSongStart"), markSongEnd=$("markSongEnd"), undoBtn=$("undoBtn"), markMsg=$("markMsg");
+const buildChunks=$("buildChunks"), buildMsg=$("buildMsg"); 
+const dlSongJson=$("dlSongJson"), dlLabeledJson=$("dlLabeledJson"), dlFfmpegSh=$("dlFfmpegSh");
+const manualDuration=$("manualDuration"), calcTotalsBtn=$("calcTotals"), totalsMsg=$("totalsMsg");
+const songTotalEl=$("songTotal"), voiceTotalEl=$("voiceTotal"), overallTotalEl=$("overallTotal");
+const totalsFilenameEl=$("totalsFilename"), downloadTotalsBtn=$("downloadTotals");
+
+let songSpans=[], pendingStart=null, labeled=[];
+
+// 🔹 Helper: Get base movie name (without extension)
+function baseName() {
+  const name = (movieName.value || "movie.mp4").trim();
+  return name.replace(/\.[^/.]+$/, ""); 
+}
+
+function fmt(ts){const sign=ts<0?"-":""; ts=Math.max(0,ts); let hh=Math.floor(ts/3600); ts-=hh*3600; let mm=Math.floor(ts/60); ts-=mm*60; let ss=Math.floor(ts); let ms=Math.round((ts-ss)*1000); return `${sign}${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}.${String(ms).padStart(3,"0")}`;}
+function human(n){return (Math.round(n*100)/100).toFixed(2);}
+
+function refreshSongs(){
+  songBody.innerHTML="";
+  songSpans.forEach((sp,i)=>{
+    const tr=document.createElement("tr");
+    const d=sp.end-sp.start;
+    tr.innerHTML=`<td>${i+1}</td>
+      <td class="mono">${fmt(sp.start)}</td>
+      <td class="mono">${fmt(sp.end)}</td>
+      <td class="mono">${human(d)}</td>
+      <td>
+        <button data-i="${i}" class="btnJumpStart">Jump start</button>
+        <button data-i="${i}" class="btnJumpEnd">Jump end</button>
+        <button data-i="${i}" class="btnDelete">Delete</button>
+      </td>`;
+    songBody.appendChild(tr);
+  });
+  songBody.querySelectorAll(".btnJumpStart").forEach(b=>b.onclick=e=>{
+    const i=parseInt(e.target.getAttribute("data-i")); vid.currentTime=songSpans[i].start;
+  });
+  songBody.querySelectorAll(".btnJumpEnd").forEach(b=>b.onclick=e=>{
+    const i=parseInt(e.target.getAttribute("data-i")); vid.currentTime=songSpans[i].end;
+  });
+  songBody.querySelectorAll(".btnDelete").forEach(b=>b.onclick=e=>{
+    const i=parseInt(e.target.getAttribute("data-i")); songSpans.splice(i,1); refreshSongs();
+  });
+}
+
+function refreshChunks(){
+  chunkBody.innerHTML="";
+  labeled.forEach((c)=>{
+    const tr=document.createElement("tr");
+    const d=c.end-c.start;
+    tr.innerHTML=`<td>${c.id}</td>
+      <td><span class="pill">${c.label}</span></td>
+      <td class="mono">${fmt(c.start)}</td>
+      <td class="mono">${fmt(c.end)}</td>
+      <td class="mono">${human(d)}</td>`;
+    chunkBody.appendChild(tr);
+  });
+}
+
+function buildLabeled(duration, spans){
+  spans=spans.slice().filter(s=>s.end>s.start);
+  spans.sort((a,b)=>a.start-b.start);
+  const merged=[];
+  for(const sp of spans){
+    const s=Math.max(0,sp.start); const e=Math.min(duration,sp.end);
+    if(merged.length===0 || s>merged[merged.length-1].end) merged.push({start:s,end:e});
+    else merged[merged.length-1].end=Math.max(merged[merged.length-1].end,e);
+  }
+  const out=[]; let cursor=0.0;
+  for(const sp of merged){
+    if(sp.start>cursor) out.push({start:cursor,end:sp.start,label:"voice"});
+    out.push({start:sp.start,end:sp.end,label:"song"});
+    cursor=Math.max(cursor,sp.end);
+  }
+  const durationSafe=isFinite(duration)&&duration>0?duration:(vid.duration||0);
+  if(durationSafe>cursor) out.push({start:cursor,end:durationSafe,label:"voice"});
+  out.forEach((c,i)=>c.id=i+1);
+  return out;
+}
+
+function videoDurationSeconds(){
+  const manual=parseFloat(manualDuration.value);
+  if(!isNaN(manual)&&manual>0)return manual;
+  return (vid&&isFinite(vid.duration))?vid.duration:0;
+}
+
+function computeTotals(){
+  const dur=videoDurationSeconds();
+  let songs=0, voices=0, total=0;
+  if(labeled&&labeled.length){
+    for(const c of labeled){
+      const d=Math.max(0,(c.end||0)-(c.start||0));
+      total+=d;
+      if(String(c.label||"").toLowerCase()==="song") songs+=d;
+      else voices+=d;
+    }
+  }else{
+    for(const sp of songSpans){
+      songs+=Math.max(0,(sp.end||0)-(sp.start||0));
+    }
+    total=dur||songs;
+    if(dur>0) voices=Math.max(0,dur-songs);
+  }
+  songTotalEl.textContent=human(songs);
+  voiceTotalEl.textContent=human(voices);
+  overallTotalEl.textContent=human(total);
+  return {song_total_seconds:songs, voice_total_seconds:voices, overall_seconds:total, video_duration_seconds:dur};
+}
+
+function dl(filename,blob){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=filename||"download.bin";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function dlText(filename,text,mime="text/plain"){dl(filename,new Blob([text],{type:mime}));}
+
+function exportTotalsJson(){
+  const base=baseName();
+  const name=(totalsFilenameEl.value||`${base}_totals.json`).trim();
+  const totals=computeTotals();
+  dl(name,new Blob([JSON.stringify(totals,null,2)],{type:"application/json"}));
+}
+
+vid.addEventListener("timeupdate",()=>{cur.textContent=fmt(vid.currentTime||0);});
+vid.addEventListener("loadedmetadata",()=>{dur.textContent=fmt(vid.duration||0);});
+
+loadBtn.onclick=()=>{
+  const f=inFile.files&&inFile.files[0];
+  if(!f){loadMsg.textContent="Choose a video file.";loadMsg.className="small err";return;}
+  const url=URL.createObjectURL(f);
+  vid.src=url; vid.load(); vid.play().catch(()=>{});
+  if(!movieName.value) movieName.value=f.name;
+  loadMsg.textContent="Loaded.";loadMsg.className="small ok";
+};
+togglePlay.onclick=()=>{if(vid.paused)vid.play();else vid.pause();};
+
+markSongStart.onclick=()=>{const t=vid.currentTime||0;pendingStart=t;markMsg.textContent="Pending SONG start at "+fmt(t);markMsg.className="small";};
+markSongEnd.onclick=()=>{
+  if(pendingStart==null){markMsg.textContent="No pending SONG start — click 'Mark SONG start' first.";markMsg.className="small err";return;}
+  let s=pendingStart,e=vid.currentTime||0;if(e<=s){const tmp=s;s=e;e=tmp;}
+  songSpans.push({start:s,end:e});pendingStart=null;markMsg.textContent="SONG added: "+fmt(s)+" → "+fmt(e);markMsg.className="small ok";
+  refreshSongs();
+};
+undoBtn.onclick=()=>{
+  if(pendingStart!=null){pendingStart=null;markMsg.textContent="Cleared pending SONG start.";markMsg.className="small";return;}
+  if(songSpans.length>0){songSpans.pop();refreshSongs();markMsg.textContent="Removed last SONG span.";markMsg.className="small ok";return;}
+  markMsg.textContent="Nothing to undo.";markMsg.className="small";
+};
+
+buildChunks.onclick=()=>{
+  const d=videoDurationSeconds();
+  if(!isFinite(d)||d<=0){buildMsg.textContent="Video not loaded yet or duration unknown.";buildMsg.className="small err";return;}
+  labeled=buildLabeled(d,songSpans);
+  buildMsg.textContent="Built "+labeled.length+" chunks.";buildMsg.className="small ok";
+  refreshChunks();
+};
+
+calcTotalsBtn.onclick=()=>{
+  computeTotals();
+  totalsMsg.textContent="Totals computed.";totalsMsg.className="small ok";
+};
+downloadTotalsBtn.onclick=exportTotalsJson;
+
+// ✅ Updated export buttons with movie-based filenames
+dlSongJson.onclick=()=>{
+  const payload=songSpans.map(sp=>({start:sp.start,end:sp.end,label:"song"}));
+  const name=`${baseName()}_song_spans.json`;
+  dlText(name,JSON.stringify(payload,null,2),"application/json");
+};
+
+dlLabeledJson.onclick=()=>{
+  if(!labeled.length){alert("Build chunks first.");return;}
+  const name=`${baseName()}_labeled_chunks.json`;
+  dlText(name,JSON.stringify(labeled,null,2),"application/json");
+};
+
+// Existing exports
+dlFfmpegSh.onclick=()=>{
+  if(!labeled.length){ alert("Build chunks first."); return; }
+  const base = baseName();
+  const inName=(document.getElementById("movieName").value||"movie.mp4").replaceAll('"','\\"');
+  const lines=[]; 
+  lines.push("#!/usr/bin/env bash"); 
+  lines.push("set -euo pipefail"); 
+  lines.push(`IN=\\"${inName}\\"`);
+  labeled.forEach(c=>{
+    const dur=(c.end-c.start).toFixed(3); const s=c.start.toFixed(3);
+    const chunkName=`${String(c.id).padStart(4,"0")}_${c.label}.mp4`;
+    lines.push(`ffmpeg -y -ss ${s} -t ${dur} -i "$IN" -c copy "${chunkName}"`);
+  });
+  dlText(`${base}_cut_chunks.sh`, lines.join("\n"), "text/x-sh");
+};
+</script>
+</body>
+</html>

@@ -1,80 +1,169 @@
-import os , time
-from moviepy import VideoFileClip
-from moviepy import  CompositeVideoClip
-from models.transcribe import AudioTranscriptor
-from preprocessing.audioextraction import AudioExtractor
-from postprocessing.integrating_srtfile import burn_subtitles, merge_videos_ffmpeg_fast
-# from faster_whisper import WhisperModel
-from preprocessing import local_settings
-from preprocessing.dataingestion import VideoLoader
-from preprocessing.splitvideo import VideoSplitter
-from utils import list_mp4_files, list_mp3_files,list_srt_files
-from faster_whisper import WhisperModel, BatchedInferencePipeline
+import os
+import json
+import base64
+import time
+import threading
+from pathlib import Path
 import streamlit as st
-import warnings
-warnings.filterwarnings("ignore")
-# model = WhisperModel('turbo', compute_type="float16", device= "cuda")
-model = ""
+from streamlit.runtime.scriptrunner import add_script_run_ctx
+from streamlit.components.v1 import html as st_html
 
-languages  = ['Kannada']
+# --- App Imports ---
+from utils.config import AppSettings
+from utils.logger import SingletonLogger
+from pipeline import TranscriberApp
 
+# =======================================================
+# APP SETUP
+# =======================================================
 
+st.set_page_config(
+    page_title="🎬 Multilingual Dubbing & Marking Suite",
+    layout="wide",
+    page_icon="🎥"
+)
 
-print(model)
+# =======================================================
+# HELPER: LOGO DISPLAY
+# =======================================================
+def get_base64_image(image_path: str) -> str:
+    try:
+        with open(image_path, "rb") as img_file:
+            encoded = base64.b64encode(img_file.read()).decode()
+            return f"data:image/png;base64,{encoded}"
+    except FileNotFoundError:
+        return ""
 
-if __name__ == "__main__":
-    
-    INPUT_PATH = "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/babloo_bachelor.mp4"
-    SEGMENT_LENGTH = 600
-    VIDEO_SPLIT_PATH = "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/splitdata/"
-    AUDIO_FILE_PATH = "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/audiofiles/"
-    SRT_FILE_PATH = "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/srtfiles/"
-    SUB_TITLE_PATH = "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/subtitled/"
-    
+logo_data_uri = get_base64_image("plugins/Nimix It.jpg")
 
-    VideoSplitter.Video_Splitter(filename = INPUT_PATH, 
-                                 segment_length = SEGMENT_LENGTH,
-                                 output_dir = VIDEO_SPLIT_PATH)
-    entities = list_mp4_files(VIDEO_SPLIT_PATH)
-    for entity in entities:
-        file_name_without_extension, _ = os.path.splitext(entity)   
+st.markdown(
+    f"""
+    <div style="text-align:center; padding-bottom:1rem">
+        <img src="{logo_data_uri}" alt="Company Logo" width="180"/>
+        <h1 style="margin-top:0.5rem;">🎙️ Multilingual Video Transcriber Suite</h1>
+        <p style="font-size:1.1rem; color:#555;">
+            Combine labeling + transcription + dubbing from one UI
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-        print('AUDIO_FILE_PATH+file_name_without_extension"   :::' , AUDIO_FILE_PATH+file_name_without_extension+"_audio.mp3")
+# =======================================================
+# DEFINE MAIN TABS
+# =======================================================
+tab1, tab2 = st.tabs(["🎼 Mark & Export (Create JSON)", "🎬 Transcription & Dubbing Pipeline"])
 
-        print('SRT_FILE_PATH+file_name_without_extension+"__SRTfile.srt"', SRT_FILE_PATH+file_name_without_extension+"__SRTfile.srt")
-        print ('SUB_TITLE_PATH+file_name_without_extension+ "_subtitled.mp4"',SUB_TITLE_PATH+file_name_without_extension+ "_subtitled.mp4")
+# =======================================================
+# TAB 1 — MARK & EXPORT JSON
+# =======================================================
+with tab1:
+    st.subheader("🎵 Step 1: Mark SONG spans and export labeled chunks")
 
-        AudioExtractor.AudioExtraction(inputpath = VIDEO_SPLIT_PATH+entity, 
-                                        outputpath = AUDIO_FILE_PATH+file_name_without_extension+"_audio.mp3") 
-        time.sleep(3)
-        AudioTranscriptor.AudioTranscriptiontoFile(model= model, 
-                                                inputpath=AUDIO_FILE_PATH+file_name_without_extension+"_audio.mp3", 
-                                                languagestoconvert= languages,
-                                                outputfolder = SRT_FILE_PATH,
-                                                outputpath = file_name_without_extension+"__SRTfile.srt")
-        time.sleep(3)
-        burn_subtitles(languages, video_path = VIDEO_SPLIT_PATH+entity,
-                       subtitle_path = file_name_without_extension+"__SRTfile.srt",
-                       subtitle_path_folder = SRT_FILE_PATH,
-                       output_path = file_name_without_extension+"_subtitled.mp4",
-                       output_path_folder = SUB_TITLE_PATH)
-        time.sleep(2)  # Pause execution for 2 seconds
-   
-    time.sleep(10)  # Pause execution for 2 seconds
-   
-    entities = list_mp4_files("/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/subtitled/Kannada/")
-    print(sorted(entities))
-    merge_videos_ffmpeg_fast(sorted(entities), "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/subtitled/Kannada/",
-                 "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/BablooBachelor/babloo_bachelor_Final_Kannada.mp4")
-    
-    time.sleep(10)
-    entities = list_mp4_files("/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/Ahista/subtitled/Marathi/")
-    print(sorted(entities))
-    merge_videos_ffmpeg_fast(sorted(entities), "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/Ahista/subtitled/Marathi/",
-                  "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/Ahista/ahista_ahista_Final_Marathi.mp4")
-    time.sleep(10)
-    entities = list_mp4_files("/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/Ahista/subtitled/Spanish/")
-    print(sorted(entities))
-    merge_videos_ffmpeg_fast(sorted(entities), "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/Ahista/subtitled/Spanish/",
-                  "/home/csc/Documents/Multilingual-Transcriber/shared_data/movieslist/Ahista/ahista_ahista_Final_Spanish.mp4")
-    time.sleep(10)
+    # Load HTML annotator (index.html)
+    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_raw = f.read()
+
+        # Optional: replace placeholder with logo
+        if logo_data_uri:
+            html_raw = html_raw.replace("__LOGO_DATA_URL__", logo_data_uri)
+
+        # Render HTML tool inside Streamlit
+        st_html(html_raw, height=800, scrolling=True)
+    else:
+        st.warning("⚠️ index.html not found — please add your marker HTML file here.")
+
+    st.divider()
+    st.info(
+        "💡 Use the above annotator to mark 'song' and 'voice' segments, "
+        "then export JSON once done."
+    )
+
+# =======================================================
+# TAB 2 — TRANSCRIPTION PIPELINE
+# =======================================================
+with tab2:
+    st.subheader("🎬 Step 2: Multilingual Video Transcription & Dubbing")
+
+    with st.form("transcriber_form"):
+        st.markdown("Upload or set video configuration below:")
+
+        input_video = st.text_input("🎥 Input Video Path",
+            value="/media/csc/nfs_share/movielist/ahista_ahista.mp4")
+        segment_length = st.number_input("⏱️ Segment Length (seconds)", min_value=60, value=600)
+        languages = st.multiselect(
+            "🌍 Target Languages",
+            options=["English","Hindi","Tamil","Kannada","Malayalam","Marathi"],
+            default=["Kannada"]
+        )
+
+        st.markdown("**✅ Select Pipeline Steps**")
+        steps = {
+            "video_split": st.checkbox("🎞️ Video splitting", True),
+            "audio_extract": st.checkbox("🎧 Audio extraction", True),
+            "transcription": st.checkbox("📝 Transcription", True),
+            "subtitle_translation": st.checkbox("🌍 Subtitle translation", True),
+            "subtitle_embedding": st.checkbox("🎬 Subtitle embedding", True),
+            "final_merge": st.checkbox("📦 Final merge per language", True),
+            "evaluation": st.checkbox("📊 Evaluation", True),
+        }
+        selected_steps = [k for k, v in steps.items() if v]
+
+        submitted = st.form_submit_button("▶ Run Selected Pipeline")
+
+    def reset_pipeline():
+        for k in ["pipeline_started", "pipeline_done", "pipeline_error", "output_dir", "languages_done"]:
+            st.session_state.pop(k, None)
+
+    def run_pipeline(selected_steps):
+        logger = SingletonLogger.getInstance("StreamlitApp").logger
+        try:
+            settings = AppSettings(
+                segment_length=segment_length,
+                input_movie_path=input_video,
+                languages_to_convert=languages
+            )
+            app = TranscriberApp(settings)
+            app.run(selected_steps=selected_steps)
+            st.session_state["pipeline_done"] = True
+            st.session_state["output_dir"] = f"shared_data/movieslist/{Path(input_video).stem}"
+            st.session_state["languages_done"] = languages
+        except Exception as e:
+            logger.exception("Pipeline failed")
+            st.session_state["pipeline_error"] = str(e)
+
+    if submitted and "pipeline_started" not in st.session_state:
+        st.session_state["pipeline_started"] = True
+        st.warning("⏳ Pipeline running... please wait.")
+        thread = threading.Thread(target=run_pipeline, args=(selected_steps,))
+        add_script_run_ctx(thread)
+        thread.start()
+
+    if st.session_state.get("pipeline_started") and not st.session_state.get("pipeline_done"):
+        st.info("⚙️ Processing... this may take several minutes.")
+        time.sleep(5)
+        st.rerun()
+
+    elif st.session_state.get("pipeline_done"):
+        st.success("✅ Pipeline completed successfully!")
+        st.button("✨ Run Again", on_click=reset_pipeline)
+
+        output_dir = st.session_state["output_dir"]
+        langs = st.session_state["languages_done"]
+        st.subheader("📂 Output Files")
+
+        for lang in langs:
+            base = Path(input_video).stem
+            final_video = os.path.join(output_dir, f"{base}_Final_{lang}.mp4")
+            eval_csv = os.path.join(output_dir, "evaluation", f"{base}__final_eval_{lang}.csv")
+
+            if os.path.exists(final_video):
+                st.markdown(f"🎬 [{lang} Video]({final_video})")
+            if os.path.exists(eval_csv):
+                st.markdown(f"📊 [{lang} Evaluation CSV]({eval_csv})")
+
+    elif st.session_state.get("pipeline_error"):
+        st.error(f"❌ Error: {st.session_state['pipeline_error']}")
+        st.button("Try Again", on_click=reset_pipeline)

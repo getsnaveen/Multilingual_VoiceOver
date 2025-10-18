@@ -5,8 +5,8 @@ import logging
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError, ClientError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from utils.logger import SingletonLogger, log_exceptions
-from utils.config import get_settings
+from logger import SingletonLogger, log_exceptions
+from config import get_settings
 local_settings = get_settings()
 
 class S3Uploader:
@@ -101,9 +101,10 @@ if __name__ == "__main__":
 
     # Upload single file
     print("Uploading single file...")
-    uploader.upload_file(local_settings.s3_bucket_name, 
-                         prefix="Test_Upload_Naveen", 
-                         file_to_upload = "/home/csc/Documents/Backup/shared_data/movieslist/rishtey/audio_files/rishtey_part5__audio.mp3" )
+    uploader.upload_file(
+    bucket=local_settings.s3_bucket_name,
+    prefix="Test_Upload_Naveen",
+    file_path="/home/csc/Documents/Backup/shared_data/movieslist/rishtey/audio_files/rishtey_part5__audio.mp3")
 
     # OR upload an entire folder
     # print("Uploading folder...")
