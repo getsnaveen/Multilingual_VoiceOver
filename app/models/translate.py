@@ -21,7 +21,7 @@ class TranslationUtils:
             openai_key (str): API key for OpenAI GPT model.
             google_key (str): API key for Google Translate API.
         """
-        self.logger = SingletonLogger.getInstance("TranslationUtils").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.openai_client = OpenAI(api_key=local_settings.openai_key)
         # self.google_key = local_settings.google_translate_key
         creds_path = local_settings.google_credentials_path

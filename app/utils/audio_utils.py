@@ -9,7 +9,7 @@ class AudioUtils:
     SRT formatting, and file generation.
     """
     def __init__(self):
-        self.logger = SingletonLogger.getInstance("AudioUtils").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("Failed to preprocess audio")
     def preprocess_audio(self, input_path: str, output_path: str) -> str:

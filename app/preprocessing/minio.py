@@ -14,7 +14,7 @@ class MinioClient:
         """
         Initializes the MinIO client using settings from the configuration file (.env).
         """
-        self.logger = SingletonLogger.getInstance("MinioClient").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.settings = get_settings()
 
         self.client = Minio(

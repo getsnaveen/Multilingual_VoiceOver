@@ -1,6 +1,8 @@
 import os
 import math
+import json
 from typing import List
+from typing import Optional, Dict
 from utils.logger import SingletonLogger, log_exceptions
 
 
@@ -13,7 +15,7 @@ class FileUtils:
         """
         Initializes the logger for FileUtils.
         """
-        self.logger = SingletonLogger.getInstance("FileUtils").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("Failed to format time")
     def format_time(self, seconds: float) -> str:
@@ -90,6 +92,39 @@ class FileUtils:
         for path in paths:
             os.makedirs(path, exist_ok=True)
             logger.info(f"✅ Directory ready: {path}")
+    
+
+    def load_labeled_json(video_path: str) -> Optional[Dict]:
+        """
+        Given a video path, attempts to load the corresponding JSON file 
+        with naming convention: <video_name>_labeled_chunks.json
+        from the same folder as the video.
+
+        Args:
+            video_path (str): Full path to the video file.
+
+        Returns:
+            dict or None: Parsed JSON content if found, else None.
+        """
+        if not video_path or not os.path.exists(video_path):
+            print(f"⚠️ Video path does not exist: {video_path}")
+            return None
+
+        video_dir = os.path.dirname(video_path)
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+
+        expected_json_name = f"{video_name}_labeled_chunks.json"
+        expected_json_path = os.path.join(video_dir, expected_json_name)
+
+        if os.path.exists(expected_json_path):
+            with open(expected_json_path, "r") as f:
+                data = json.load(f)
+            print(f"✅ Loaded JSON automatically: {expected_json_name}")
+            return data
+        else:
+            print(f"⚠️ JSON file not found. Expected: {expected_json_name}")
+            return None
+
         
 # if __name__ == "__main__":
 #     futils = FileUtils()

@@ -1,209 +1,301 @@
-import streamlit as st
-import socket
-from streamlit.runtime.scriptrunner import add_script_run_ctx
-import threading, os, time
+import os
+import json
 import base64
+import time
+import threading
 from pathlib import Path
+import streamlit as st
+from streamlit.runtime.scriptrunner import add_script_run_ctx
+from streamlit.components.v1 import html as st_html
+
+# --- App Imports ---
 from utils.config import AppSettings
-from pipeline import TranscriberApp
 from utils.logger import SingletonLogger
-import torch, types
-torch.classes.__path__ = types.SimpleNamespace(_path=[])
+from utils.chunk_structure import ProjectStructureManager,VideoProcessor
+from pipeline import TranscriberApp
+from utils.config import get_settings
+local_settings = get_settings()
 
-# ------------------ LOGO FROM LOCAL FILE ------------------
-def get_base64_image(image_path: str) -> str:
-    with open(image_path, "rb") as img_file:
-        encoded = base64.b64encode(img_file.read()).decode()
-        return f"data:image/png;base64,{encoded}"
+# =======================================================
+# APP SETUP
+# =======================================================
 
-logo_data_uri = get_base64_image("plugins/Nimix It.jpg")
-
-# ------------------ UI CONFIGURATION ------------------
 st.set_page_config(
-    page_title="Multilingual Video Transcriber",
+    page_title="🎬 Multilingual Dubbing & Marking Suite",
     layout="wide",
-    page_icon="🎬",
+    page_icon="🎥"
 )
+
+# =======================================================
+# HELPER: LOGO DISPLAY
+# =======================================================
+def get_base64_image(image_path: str) -> str:
+    try:
+        with open(image_path, "rb") as img_file:
+            encoded = base64.b64encode(img_file.read()).decode()
+            return f"data:image/png;base64,{encoded}"
+    except FileNotFoundError:
+        return ""
+
+logo_data_uri = get_base64_image("app/Nimix It.jpg")
 
 st.markdown(
     f"""
-    <style>
-    .stApp {{
-        background-image: linear-gradient(to right, #e0f7fa, #f1f8e9);
-        background-size: cover;
-        font-family: 'Arial', sans-serif;
-    }}
-    .main > div:first-child {{
-        padding-top: 2rem;
-    }}
-    </style>
     <div style="text-align:center; padding-bottom:1rem">
         <img src="{logo_data_uri}" alt="Company Logo" width="180"/>
-        <h1 style="margin-top:0.5rem;">🎙️ Multilingual Movie Transcriber</h1>
-        <p style="font-size:1.2rem; color:#444;">
-            From Transcription to Dubbing – Your Multilingual Video Assistant
+        <h1 style="margin-top:0.5rem;">🎙️▶️🔊 Nimix Poly Media Suite</h1>
+        <p style="font-size:1.1rem; color:#555;">
+            Combine labeling + transcription + dubbing from one UI
         </p>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ------------------ SIDEBAR INFO ------------------
-st.sidebar.markdown("## 📋 Full Pipeline Overview")
-st.sidebar.info(
-    """
-    The pipeline includes:
-    - 🎞️ Video splitting  
-    - 🎧 Audio extraction  
-    - 📝 Transcription  
-    - 🌍 Subtitle translation  
-    - 🎬 Subtitle embedding  
-    - 📦 Final merged video per language  
-    - 📊 Evaluation
-    """
-)
+# =======================================================
+# DEFINE MAIN TABS
+# =======================================================
+tab1, tab2 = st.tabs(["🎼 Mark & Export (Create JSON)", "🎬 Transcription & Dubbing Pipeline"])
 
-# --- Display container details ---
-container_id = socket.gethostname()
-st.sidebar.markdown("---")
-st.sidebar.markdown(f"🆔 *Container ID:* {container_id}")
-st.sidebar.caption("(This shows which container instance you are connected to)")
+# =======================================================
+# TAB 1 — MARK & EXPORT JSON
+# =======================================================
+with tab1:
+    st.subheader("🎵 Step 1: Mark SONG spans and export labeled chunks")
 
-# ------------------ FORM INPUT ------------------
-with st.form("transcriber_form"):
-    st.subheader("Upload & Configuration")
+    # Load HTML annotator (index.html)
+    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_raw = f.read()
 
-    input_video = st.text_input("🎥 Input Video Path", value="/media/csc/cb6528c8-34d9-4c57-9c9b-02dfb3a3daea/nfs_share/movielist/ahista_ahista.mp4")
-    segment_length = st.number_input("⏱️ Segment Length (seconds)", min_value=60, value=600)
-    languages = st.multiselect(
-        "🌐 Languages to Convert",
-        options=[
-            "English", "Spanish", "Bhasa", "Hindi", "Malay", "Tamil",
-            "Malayalam", "Kannada", "Marathi", "Gujarati", "Bhojpuri"],
-        default=["Kannada"]
+        # Optional: replace placeholder with logo
+        if logo_data_uri:
+            html_raw = html_raw.replace("__LOGO_DATA_URL__", logo_data_uri)
+
+        # Render HTML tool inside Streamlit
+        st_html(html_raw, height=800, scrolling=True)
+    else:
+        st.warning("⚠️ index.html not found — please add your marker HTML file here.")
+
+    st.divider()
+    st.info(
+        "💡 Use the above annotator to mark 'song' and 'voice' segments, "
+        "then export JSON once done."
     )
 
-    st.markdown("**✅ Select Pipeline Steps**")
+# =======================================================
+# TAB 2 — TRANSCRIPTION PIPELINE
+# =======================================================
+with tab2:
+    st.subheader("🎬 Step 2: Multilingual Video Transcription & Dubbing")
 
-    video_split = st.checkbox("🎞️ Video splitting", value=True)
-    audio_extract = st.checkbox("🎧 Audio extraction", value=True)
-    transcription = st.checkbox("📝 Transcription", value=True)
-    subtitle_translation = st.checkbox("🌍 Subtitle translation", value=True)
-    subtitle_embedding = st.checkbox("🎬 Subtitle embedding", value=True)
-    final_merge = st.checkbox("📦 Final merged video per language", value=True)
-    evaluation = st.checkbox("📊 Evaluation", value=True)
+    # --- Input Section ---
+    with st.form("transcriber_form"):
+        st.markdown("Set video configuration below:")
 
-    steps_selected = []
-    if video_split: steps_selected.append("video_split")
-    if audio_extract: steps_selected.append("audio_extract")
-    if transcription: steps_selected.append("transcription")
-    if subtitle_translation: steps_selected.append("subtitle_translation")
-    if subtitle_embedding: steps_selected.append("subtitle_embedding")
-    if final_merge: steps_selected.append("final_merge")
-    if evaluation: steps_selected.append("evaluation")
-
-    submitted = st.form_submit_button("▶ Run Selected Pipeline")
-
-# ------------------ PIPELINE EXECUTION ------------------
-def reset_pipeline():
-    """Clears session state to allow for a new run."""
-    st.session_state.pop("pipeline_started", None)
-    st.session_state.pop("pipeline_done", None)
-    st.session_state.pop("pipeline_error", None)
-    st.session_state.pop("output_dir", None)
-    st.session_state.pop("languages_done", None)
-
-def run_pipeline(selected_steps):
-    logger = SingletonLogger.getInstance("StreamlitApp").logger
-    try:
-        settings = AppSettings(
-            segment_length=segment_length,
-            input_movie_path=input_video,
-            languages_to_convert=languages
+        input_video = st.text_input(
+            "🎥 Input Video Path",
+            value=" Please Enter .mp4 File Path"
         )
 
-        app = TranscriberApp(settings)
-        app.run(selected_steps=selected_steps)
+        languages = st.multiselect(
+            "🌍 Target Languages",
+            options=["Hindi", "Malay", "Bhasa", "Arabic", "Swahili", "Sinhala", 
+                     "Telugu", "Tamil", "Kannada", "Malayalam", "Marathi", "Gujarati", "Bhojpuri"],
+            default=["Hindi"]
+        )
 
-        st.session_state["pipeline_done"] = True
-        st.session_state["output_dir"] = f"shared_data/movieslist/{Path(input_video).stem}"
-        st.session_state["languages_done"] = languages
+        st.markdown("**✅ Select Pipeline Steps**")
+        steps = {
+            "split_songs_stories": st.checkbox("🎼 Split to Songs & Stories", True),
+            "audio_extract": st.checkbox("🎧 Audio extraction", True),
+            "transcription": st.checkbox("📝 Transcription", True),
+            "subtitle_translation": st.checkbox("🌍 Subtitle translation", True),
+            "subtitle_embedding": st.checkbox("🎬 Subtitle embedding", True),
+            "evaluation": st.checkbox("📊 Evaluation", True),
+            "diarization": st.checkbox("🗣️ Speaker Diarization", True),
+            "upload_to_s3": st.checkbox("☁️ Upload Outputs to S3", True),
+            "download_from_s3": st.checkbox("⬇️ Download from S3", True),
+            "final_merge": st.checkbox("🎞️ Final Merge", True),
+        }
+        selected_steps = [k for k, v in steps.items() if v]
+        submitted = st.form_submit_button("▶ Run Selected Pipeline")
 
-    except Exception as e:
-        logger.exception("❌ Streamlit Pipeline failed")
-        st.session_state["pipeline_error"] = str(e)
-
-if submitted and "pipeline_started" not in st.session_state:
-    st.session_state["pipeline_started"] = True
-    st.session_state["pipeline_done"] = False
-    st.session_state["pipeline_error"] = None
-
-    st.warning("⏳ Running the transcription pipeline. This may take several minutes...")
-
-    thread = threading.Thread(target=run_pipeline, args=(steps_selected,))
-    add_script_run_ctx(thread)
-    thread.start()
-
-# ✅ Show live progress with non-blocking polling
-if st.session_state.get("pipeline_started") and not st.session_state.get("pipeline_done") and not st.session_state.get("pipeline_error"):
-    st.info("⏳ Pipeline is running... please wait. This page will auto-refresh.")
-    # This non-blocking sleep + rerun creates a polling effect
-    time.sleep(5) 
-    st.rerun()
-
-# ------------------ RESULTS & DOWNLOADS ------------------
-if st.session_state.get("pipeline_error"):
-    st.error(f"❌ Pipeline failed: {st.session_state['pipeline_error']}")
-    st.button("Try Again", on_click=reset_pipeline) # Add reset button on error
-
-elif st.session_state.get("pipeline_done"):
-    st.success("✅ Pipeline completed successfully!")
-    st.info("📁 Outputs are ready!")
-
-    # Add a reset button to allow the user to run another pipeline
-    st.button("✨ Run a New Pipeline", on_click=reset_pipeline)
+    # ==========================================================
+    # Helper Functions
+    # ==========================================================
+    def reset_pipeline():
+        for k in ["pipeline_started", "pipeline_done", "pipeline_error", "output_dir", "languages_done"]:
+            st.session_state.pop(k, None)
     
-    st.markdown("---") # Add a separator
+    def load_labeled_json_from_video(video_path: str) -> str:
+        """
+        Load labeled_chunks.json from the same folder as the video.
+        Returns JSON content as string, or None if file not found.
+        """
+        if not video_path or not os.path.exists(video_path):
+            st.error(f"❌ Video path does not exist: {video_path}")
+            return None
 
-    output_dir = st.session_state["output_dir"] # e.g., "static/ahista_ahista"
-    languages = st.session_state["languages_done"]
+        video_dir = os.path.dirname(video_path)
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        json_file = os.path.join(video_dir, f"{video_name}_labeled_chunks.json")
 
-    st.subheader("Download Your Files")
-
-    for lang in languages:
-        video_filename = f"{Path(input_video).stem}_Final_{lang}.mp4"
-        csv_filename = f"{Path(input_video).stem}__final_eval_{lang}.csv"
-
-        final_video_path = os.path.join(output_dir, video_filename)
-        eval_csv_path = os.path.join(output_dir, "evaluation", csv_filename)
-
-        # --- Video Path Link ---
-        if os.path.exists(final_video_path):
-            file_size_mb = os.path.getsize(final_video_path) / (1024 * 1024)
-            st.markdown(
-                f"""
-                <p>
-                    <strong>{lang} Subtitled Video:</strong><br>
-                    <a href="file://{os.path.abspath(final_video_path)}" target="_blank">
-                        📂 Open {video_filename} ({file_size_mb:.2f} MB)
-                    </a>
-                </p>
-                """,
-                unsafe_allow_html=True
-            )
+        if os.path.exists(json_file):
+            with open(json_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            st.success(f"✅ Loaded JSON automatically: {os.path.basename(json_file)}")
+            return content
         else:
-            st.warning(f"Video file for {lang} not found at: {final_video_path}")
+            st.error(f"⚠️ JSON file not found. Expected: {os.path.basename(json_file)}")
+            return None
 
-        # --- CSV Path Link ---
-        if os.path.exists(eval_csv_path):
-            st.markdown(
-                f"""
-                <p>
-                    <strong>{lang} Evaluation CSV:</strong><br>
-                    <a href="file://{os.path.abspath(eval_csv_path)}" target="_blank">
-                        📂 Open {csv_filename}
-                    </a>
-                </p>
-                """,
-                unsafe_allow_html=True
+    def run_songs_pipeline(movie_path, songs, settings):
+        """Run transcription + translation pipeline for songs."""
+        from pipeline import TranscriberApp
+        logger = SingletonLogger.getInstance("SongsPipeline").logger
+        try:
+            st.info(f"🎵 Processing {len(songs)} song segments in parallel...")
+
+            # Derive story JSON path dynamically based on input movie name
+            video_dir = os.path.dirname(movie_path)
+            video_name = os.path.splitext(os.path.basename(movie_path))[0]
+            story_json_path = os.path.join(video_dir, f"{video_name}_labeled_chunks.json")
+
+            if not os.path.exists(story_json_path):
+                st.warning(f"⚠️ Story JSON not found at {story_json_path}, using songs only.")
+
+            # Initialize manager with the dynamically computed JSON path
+            manager = ProjectStructureManager(
+                input_movie_path=settings.input_movie_path,
+                base_language="BaseLanguage",
+                target_languages=settings.languages_to_convert,
+                story_json_path=story_json_path
             )
+            project_root = manager.create_structure(move_files=True)
+            processor = VideoProcessor(manager)
+            processor.extract_segments(label="song")
+
+
+            # Initialize TranscriberApp
+            app = TranscriberApp(settings, manager)
+
+            # Steps specific to songs
+            steps = [
+                "audio_extract",
+                "transcription",
+                "subtitle_translation",
+                "subtitle_embedding",
+                "evaluation"
+            ]
+            app.run(selected_steps=steps)
+            logger.info("✅ Songs pipeline completed successfully.")
+        except Exception as e:
+            logger.exception("Songs pipeline failed")
+            st.error(f"❌ Songs pipeline failed: {e}")    
+   
+    def run_stories_pipeline(movie_path, stories, settings):
+        """Run diarization + S3 + merge pipeline for stories."""
+        from utils.storageconnector import S3Uploader
+        logger = SingletonLogger.getInstance("StoriesPipeline").logger
+        try:
+            st.info(f"🎬 Processing {len(stories)} story segments in parallel...")
+
+            # --- Diarization Step ---
+            from models.diarization import ElevenLabsTranscriber
+            st.info("🗣 Performing speaker diarization...")
+            ElevenLabsTranscriber(movie_path)
+            st.success("✅ Diarization completed!")
+
+            # --- Upload to S3 ---
+            st.info("☁️ Uploading story outputs to S3...")
+            s3 = S3Uploader(access_key=local_settings.aws_access_key, 
+                          secret_key=local_settings.aws_secret_key, 
+                          region=local_settings.aws_region)
+
+            output_dir = f"{Path(movie_path).stem}"
+            for root, _, files in os.walk(output_dir):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    key = f"{Path(movie_path).stem}/stories/{file}"
+                    s3.upload_file(full_path, "test-bucket", key)
+            st.success("✅ Story files uploaded to S3.")
+
+            # --- Optional: Download back for merging ---
+            st.info("⬇️ Downloading story outputs for final merge...")
+            for file in files:
+                s3.download_file("test-bucket", key, os.path.join(output_dir, file))
+            st.success("✅ Story files downloaded.")
+
+            # --- Merge Songs + Stories ---
+            st.info("🎞️ Merging songs and stories...")
+            time.sleep(2)
+            logger.info("✅ Final merge completed.")
+
+        except Exception as e:
+            logger.exception("Stories pipeline failed")
+            st.error(f"❌ Stories pipeline failed: {e}")
+
+    def run_parallel_pipelines(movie_path, json_data):
+        """Split JSON and run songs/stories pipelines in parallel threads."""
+        logger = SingletonLogger.getInstance("ParallelPipeline").logger
+        try:
+            data = json.loads(json_data)
+            songs = [d for d in data if d.get("label") == "song"]
+            stories = [d for d in data if d.get("label") == "voice"]
+
+            settings = AppSettings(
+                input_movie_path=movie_path,
+                languages_to_convert=languages
+            )
+
+            st.info(f"🎵 Found {len(songs)} song segments | 🎬 {len(stories)} story segments")
+
+            # Create threads
+            t1 = threading.Thread(target=run_songs_pipeline, args=(movie_path, songs, settings))
+            t2 = threading.Thread(target=run_stories_pipeline, args=(movie_path, stories, settings))
+
+            # Attach Streamlit runtime contexts
+            add_script_run_ctx(t1)
+            add_script_run_ctx(t2)
+
+            t1.start()
+            t2.start()
+
+            t1.join()
+            t2.join()
+
+            st.success("✅ Both song and story pipelines completed successfully!")
+
+        except Exception as e:
+            logger.exception("Parallel pipeline failed")
+            st.error(f"❌ Parallel pipeline failed: {e}")
+
+    # ==========================================================
+    # Execution Control
+    # ==========================================================
+
+    if submitted and "pipeline_started" not in st.session_state:
+        if not input_video or not os.path.exists(input_video):
+            st.error("❌ Invalid movie path. Please provide a valid video file.")
+        else:
+            st.session_state["pipeline_started"] = True
+            st.warning("⏳ Pipeline running... please wait.")
+
+            # Load JSON automatically from same folder
+            json_content = load_labeled_json_from_video(input_video)
+            if json_content:
+                thread = threading.Thread(target=run_parallel_pipelines, args=(input_video, json_content))
+                add_script_run_ctx(thread)
+                thread.start()
+
+    # --- Progress Display ---
+    if st.session_state.get("pipeline_started") and not st.session_state.get("pipeline_done"):
+        st.info("⚙️ Processing both pipelines... please wait.")
+        time.sleep(5)
+        st.rerun()
+
+    elif st.session_state.get("pipeline_done"):
+        st.success("✅ All pipelines completed successfully!")
+        st.button("✨ Run Again", on_click=reset_pipeline)

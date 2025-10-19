@@ -18,7 +18,7 @@ class TranslationEvaluator:
     """
 
     def __init__(self):
-        self.logger = SingletonLogger.getInstance("TranslationEvaluator").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.openai_client = OpenAI(api_key=local_settings.openai_key) 
         self.gemini_client = genai.Client(http_options=HttpOptions(api_version="v1"), 
                                           api_key=local_settings.gemini_key)

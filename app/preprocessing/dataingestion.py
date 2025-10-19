@@ -42,7 +42,7 @@ class VideoLoader(Loader):
 
     def __init__(self):
         super().__init__()
-        self.logger = SingletonLogger.getInstance("VideoLoader").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("Video loading not yet implemented")
     def video_loader(self, filepath: str, *args, **kwargs):

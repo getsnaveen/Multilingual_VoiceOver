@@ -10,7 +10,7 @@ class PackageSetup:
 
     HYPEN_E_DOT = "-e ."
 
-    def __init__(self, requirements_path: str = "plugins/requirements.txt"):
+    def __init__(self, requirements_path: str = "app/requirements.txt"):
         """
         Initializes the setup configuration with logger and file path.
         
@@ -18,7 +18,7 @@ class PackageSetup:
             requirements_path (str): Path to the requirements.txt file.
         """
         self.requirements_path = requirements_path
-        self.logger = SingletonLogger.getInstance("SetupLogger").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("Failed to read requirements file")
     def get_requirements(self) -> List[str]:

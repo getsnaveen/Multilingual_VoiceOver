@@ -40,7 +40,7 @@ class AudioExtractor(Extraction):
         Initializes the AudioExtractor with logging support.
         """
         super().__init__()
-        self.logger = SingletonLogger.getInstance("AudioExtractor").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("Audio extraction failed")
     def AudioExtraction(self, inputpath: str, outputpath: str, *args, **kwargs):

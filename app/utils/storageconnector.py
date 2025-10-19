@@ -4,9 +4,8 @@ import pathlib
 import logging
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError, ClientError
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from logger import SingletonLogger, log_exceptions
-from config import get_settings
+from utils.logger import SingletonLogger, log_exceptions
+from utils.config import get_settings
 local_settings = get_settings()
 
 class S3Uploader:
@@ -19,7 +18,7 @@ class S3Uploader:
         Initialize S3 client using AWS credentials.
         """
         try:
-            self.logger = SingletonLogger.getInstance(__name__).logger
+            self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
             self.s3 = boto3.client(
                 "s3",
                 aws_access_key_id=local_settings.aws_access_key,

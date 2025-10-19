@@ -49,7 +49,7 @@ class AudioTranscriptor(Transcribe):
         """
         Initializes the AudioTranscriptor with a logger instance.
         """
-        self.logger = SingletonLogger.getInstance("AudioTranscriptor").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.translator = TranslationUtils()
         self.srt_trnaslator = SRTTranslator(self.translator)
 
@@ -132,7 +132,7 @@ class AudioTranscriptorElevenLabs(ABC):
     """
 
     def __init__(self):
-        self.logger = SingletonLogger.getInstance("AudioTranscriptor").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.elevenlabs_key = local_settings.elevenlabs_key
         self.elevenlabs_modelid = local_settings.elevenlabs_modelid
         self.elevenlabs_url = local_settings.elevenlabs_url

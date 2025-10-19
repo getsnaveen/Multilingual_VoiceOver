@@ -10,8 +10,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 
 class VideoProcessor:
-    def __init__(self, font_path: str = "plugins/Arial.ttf"):
-        self.logger = SingletonLogger.getInstance("VideoProcessor").logger
+    def __init__(self, font_path: str = "app/Arial.ttf"):
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.font_path = font_path
 
     @staticmethod

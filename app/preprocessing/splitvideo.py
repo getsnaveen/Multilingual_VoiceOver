@@ -36,7 +36,7 @@ class VideoSplitter(Splitter):
         Initializes the VideoSplitter with a logger.
         """
         super().__init__()
-        self.logger = SingletonLogger.getInstance("VideoSplitter").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("Video splitting failed")
     def video_splitter(self, filepath: str, segment_length: Union[int, float], output_dir: str, *args, **kwargs):
@@ -75,7 +75,7 @@ class VideoSplitter(Splitter):
 
 class FFmpegVideoSplitter(VideoSplitter):
     def __init__(self):
-        self.logger = SingletonLogger.getInstance("FFmpegVideoSplitter").logger
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
 
     @log_exceptions("ffmpeg video splitter ")
     def ffmpeg_split_video(self, input_path: str, start_time: float, duration: float, output_path: str):

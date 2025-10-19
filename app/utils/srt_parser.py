@@ -17,7 +17,7 @@ class SRTTranslator:
             logger: Optional custom logger. If not provided, a singleton logger will be used.
         """
         self.translator = translator
-        self.logger = SingletonLogger.getInstance("SRTTranslator").logger        
+        self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger       
 
     @log_exceptions("Failed to parse SRT file")
     def parse_srt_file(self, path: str) -> List[Tuple[int, str, str, str]]:

@@ -223,11 +223,11 @@ class ElevenLabsTranscriber:
 # ---------------------------------------------------------------------
 # Script Entry Point
 # ---------------------------------------------------------------------
-if __name__ == "__main__":
-    AUDIO_FILE_PATH = ("/home/csc/Documents/Backup/shared_data/movieslist/rishtey/audio_files/rishtey_part5__audio.mp3" )    
-    OUTPUT_PATH = "/home/csc/Documents/Backup/shared_data/movieslist/rishtey/audio_files/rishtey_part5__transcript.txt"
+# if __name__ == "__main__":
+#     AUDIO_FILE_PATH = ("/home/csc/Documents/Backup/shared_data/movieslist/rishtey/audio_files/rishtey_part5__audio.mp3" )    
+#     OUTPUT_PATH = "/home/csc/Documents/Backup/shared_data/movieslist/rishtey/audio_files/rishtey_part5__transcript.txt"
 
-    transcriber = ElevenLabsTranscriber()
-    transcriber.run_transcription(AUDIO_FILE_PATH, max_words_per_line=15, output_file=OUTPUT_PATH)
+#     transcriber = ElevenLabsTranscriber()
+#     transcriber.run_transcription(AUDIO_FILE_PATH, max_words_per_line=15, output_file=OUTPUT_PATH)
 
    
