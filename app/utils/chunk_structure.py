@@ -89,10 +89,9 @@ class FFmpegHandler:
                 raise ValueError(f"❌ Invalid segment ID '{seg_id}' — expected a numeric value.")
 
             out_file = os.path.join(
-                output_dir,
-                f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}.{ext}"
-            )
-
+                    output_dir,
+                    f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}_{lang_suffix}.{ext}"
+                )
 
             ffmpeg.input(video_path, ss=start, t=duration).output(out_file, c="copy").overwrite_output().run(quiet=True)
             outputs.append({
@@ -172,7 +171,7 @@ class ProjectStructureManager:
         self.input_movie_path = Path(input_movie_path)
         self.movie_name = self.input_movie_path.stem
         self.upload_dir = self.input_movie_path.parent
-        self.base_language = base_language
+        self.base_language = "BaseLanguage"
         self.target_languages = target_languages or []
         self.story_json_path = Path(story_json_path) if story_json_path else None
         self.project_root = self.upload_dir / self.movie_name
@@ -201,47 +200,51 @@ class ProjectStructureManager:
             return result
 
     def create_structure(self, move_files: bool = True) -> Path:
+        # Parse JSON to know how many song/voice segments
         chunk_data = self._parse_json_chunks()
-        folders_to_create = []
-        songs_base = self.input_root / "songs" / self.base_language
-        story_base = self.input_root / "story" / self.base_language
 
-        for song_id in chunk_data["songs"]:
-            base = songs_base 
-            for sub in ["audio_files", "srt_files"]:
-                folders_to_create.append(base / sub)
-        for voice_id in chunk_data["voice"]:
-            base = story_base
-            for sub in ["audio_files", "srt_files"]:
-                folders_to_create.append(base / sub)
+        # Base Input folders
+        songs_base = self.input_root / self.base_language / "songs"
+        story_base = self.input_root / self.base_language / "story"
 
+        # Create Input folders
+        for base, subs, chunk_list in [
+            (songs_base, ["audio_files", "song_files", "srt_files"], chunk_data["songs"]),
+            (story_base, ["audio_files", "story_files", "srt_files"], chunk_data["voice"])
+        ]:
+            for sub in subs:
+                os.makedirs(base / sub, exist_ok=True)
+
+        # Create Output folders per target language
         for lang in self.target_languages:
             lang_root = self.output_root / lang
-            for song_id in chunk_data["songs"]:
-                base = lang_root / "songs" 
-                for sub in ["srt_files", "subtitle_files", "evaluation"]:
-                    folders_to_create.append(base / sub)
-            for voice_id in chunk_data["voice"]:
-                base = lang_root / "story" 
-                for sub in ["srt_files", "dubbed_files", "evaluation"]:
-                    folders_to_create.append(base / sub)
+            songs_out = lang_root / "songs"
+            story_out = lang_root / "story"
 
-        for folder in folders_to_create:
-            os.makedirs(folder, exist_ok=True)
+            # Songs output
+            for sub in ["srt_files", "subtitle_files", "evaluation"]:
+                os.makedirs(songs_out / sub, exist_ok=True)
 
+            # Story output
+            for sub in ["dubbed_files", "srt_files", "evaluation"]:
+                os.makedirs(story_out / sub, exist_ok=True)
+
+        # Move movie and JSON into Input
         if move_files:
             if not self.input_movie_path.exists():
                 raise FileNotFoundError(f"❌ Movie not found: {self.input_movie_path}")
             dest_movie_path = self.input_root / f"{self.movie_name}.mp4"
             if not dest_movie_path.exists():
                 shutil.move(self.input_movie_path, dest_movie_path)
+
             if self.story_json_path and self.story_json_path.exists():
-                dest_json_path = self.input_root / f"{self.story_json_path.name}"
+                dest_json_path = self.input_root / self.story_json_path.name
                 if not dest_json_path.exists():
                     shutil.move(self.story_json_path, dest_json_path)
 
         print(f"✅ Project structure created successfully under: {self.project_root}")
         return self.project_root
+
     
 # ---------------------------------------------------------------------
 # Video Processor
@@ -272,47 +275,46 @@ class VideoProcessor:
     # ---------------------------------------------------------------
     # Phase 1: Extract Segments Only (No Concatenation)
     # ---------------------------------------------------------------
-    def extract_segments(self, label: str):
-        """
-        Extracts video segments by label and saves them into the project folder.
-        This phase runs first and can be validated by a human.
-        """
-        label_segments = self.extractor.extract_segments_by_label(label)
-        video_duration = self.ffmpeg.get_video_duration(str(self.input_video))
-        logger.info(f"🎞️ Total video duration: {video_duration}")
+    def extract_segments(
+        self,
+        video_path: str,
+        segments: List[Dict],
+        output_dir: str = "clips",
+        lang_suffix: Optional[str] = None
+    ) -> List[Dict]:
+        os.makedirs(output_dir, exist_ok=True)
+        outputs = []
+        ext = os.path.splitext(video_path)[1].lstrip(".")
+        movie_name = os.path.splitext(os.path.basename(video_path))[0]
+        suffix = f"_{lang_suffix}" if lang_suffix else ""
 
-        story_segments = []
-        if label.lower() == "song":
-            voice_segments = self.extractor.extract_segments_by_label("voice")
-            story_segments = self.logic.get_story_segments(label_segments, voice_segments, video_duration)
+        for seg in segments:
+            seg_id = seg.get("id")
+            start, end = seg["start"], seg["end"]
+            duration = TimeUtils.time_to_seconds(end) - TimeUtils.time_to_seconds(start)
+            start_str = start.replace(":", "-")
+            end_str = end.replace(":", "-")
 
-        base_lang = self.project_manager.base_language
-        song_dir = self.project_manager.input_root / "songs" / base_lang / "song_files"
-        story_dir = self.project_manager.input_root / "story" / base_lang / "story_files"
-        os.makedirs(song_dir, exist_ok=True)
-        os.makedirs(story_dir, exist_ok=True)
+            try:
+                seg_id_num = int(seg_id)
+            except (ValueError, TypeError):
+                raise ValueError(f"❌ Invalid segment ID '{seg_id}' — expected a numeric value.")
 
-        song_clips = []
-        if label_segments:
-            logger.info("🎶 Extracting song segments...")
-            song_clips = self.ffmpeg.extract_segments(str(self.input_video), label_segments, str(song_dir))
+            out_file = os.path.join(
+                output_dir,
+                f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}{suffix}.{ext}"
+            )
 
-        story_clips = []
-        if story_segments:
-            logger.info("🗣️ Extracting story segments...")
-            story_clips = self.ffmpeg.extract_segments(str(self.input_video), story_segments, str(story_dir))
+            ffmpeg.input(video_path, ss=start, t=duration).output(out_file, c="copy").overwrite_output().run(quiet=True)
+            outputs.append({
+                "file": out_file,
+                "id": seg_id,
+                "start": start,
+                "end": end
+            })
 
-        all_segments = song_clips + story_clips
-        # ✅ Sort by ID first, then start time (for consistency)
-        all_segments_sorted = sorted(
-            all_segments,
-            key=lambda x: (int(x.get("id", 0)), TimeUtils.time_to_seconds(x["start"])))
-
-
-        self.extracted_segments = all_segments_sorted
-        logger.info("✅ Segment extraction completed successfully (no concatenation yet).")
-
-        return all_segments_sorted
+        logger.info(f"Extracted {len(outputs)} clips into '{output_dir}/'.")
+        return outputs
 
     # ---------------------------------------------------------------
     # Phase 2: Explicit Concatenation (Triggered After Human Validation)
@@ -338,31 +340,31 @@ class VideoProcessor:
 # ---------------------------------------------------------------------
 # Example Usage
 # ---------------------------------------------------------------------
-# if __name__ == "__main__":
-#     manager = ProjectStructureManager(
-#         input_movie_path="/home/csc/Documents/Test/rishtey.mp4",
-#         base_language="BaseLanguage",
-#         target_languages=[
-#             "Malay",
-#             "Bhasa",
-#             "Arabic",
-#             "Swahili",
-#             "Sinhala",
-#             "Telugu",
-#             "Tamil",
-#             "Kannada",
-#             "Malayalam",
-#             "Marathi",
-#             "Gujarati",
-#             "Bhojpuri",
-#         ],
-#         story_json_path="/home/csc/Documents/Test/rishtey_labeled_chunks.json",
-#     )
+if __name__ == "__main__":
+    manager = ProjectStructureManager(
+        input_movie_path="/home/csc/Documents/Test1/rishtey.mp4",
+        base_language="BaseLanguage",
+        target_languages=[
+            "Malay",
+            "Bhasa",
+            "Arabic",
+            "Swahili",
+            "Sinhala",
+            "Telugu",
+            "Tamil",
+            "Kannada",
+            "Malayalam",
+            "Marathi",
+            "Gujarati",
+            "Bhojpuri",
+        ],
+        story_json_path="/home/csc/Documents/Test1/rishtey_labeled_chunks.json",
+    )
 
-#     # Create full structured folder tree and move files
-#     project_root = manager.create_structure(move_files=True)
-#     print(f"✅ Project ready at: {project_root}")
+    # Create full structured folder tree and move files
+    project_root = manager.create_structure(move_files=True)
+    print(f"✅ Project ready at: {project_root}")
 
-#     # Initialize Video Processor using existing structure
-#     processor = VideoProcessor(manager)
-#     processor.extract_segments(label="song")
+    # Initialize Video Processor using existing structure
+    processor = VideoProcessor(manager)
+    processor.extract_segments(label="song")

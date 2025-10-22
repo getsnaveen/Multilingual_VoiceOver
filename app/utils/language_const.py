@@ -10,7 +10,11 @@ LANGUAGES = {
     "Kannada": "kn",
     "Marathi": "mr",
     "Gujarati": "gu",
-    "Bhojpuri": "bho"
+    "Bhojpuri": "bho",
+    "Sinhala": "si",
+    "Swahili": "sw",
+    "Arabic": "ar",
+    "Telugu": "te"
 }
 
 from typing import Dict
@@ -74,6 +78,30 @@ LANGUAGE_CONFIG: Dict[str, Dict[str, str]] = {
             "font_size": 32,
             "font_color": "&H0000FF00",
             "font_file": "NotoSansDevanagari-Regular.ttf"
+        },
+         "ar": {
+            "font_name": "Amiri",
+            "font_size": 32,
+            "font_color": "&H00FFFFFF",
+            "font_file": "Amiri-Regular.ttf"
+        },
+        "sw": {
+            "font_name": "Noto Sans",
+            "font_size": 30,
+            "font_color": "&H00FFFF00",
+            "font_file": "NotoSans-Regular.ttf"
+        },
+        "si": {
+            "font_name": "Noto Sans Sinhala",
+            "font_size": 30,
+            "font_color": "&H0000FF00",
+            "font_file": "NotoSansSinhala-Regular.ttf"
+        },
+        "te": {
+            "font_name": "Noto Sans Telugu",
+            "font_size": 30,
+            "font_color": "&H00FFA500",
+            "font_file": "NotoSansTelugu-Regular.ttf"
         }
     }
 

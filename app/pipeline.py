@@ -1,5 +1,8 @@
 import os, time
 from pathlib import Path
+from shutil import rmtree
+from natsort import natsorted
+
 from utils.logger import SingletonLogger, log_exceptions
 from models.transcribe import AudioTranscriptor
 from preprocessing.audioextraction import AudioExtractor
@@ -10,9 +13,11 @@ from faster_whisper import WhisperModel
 from utils.config import AppSettings
 from utils.chunk_structure import ProjectStructureManager
 from utils.language_const import LANGUAGES
-from natsort import natsorted
-from shutil import rmtree
 from evalutions.evalution import TranslationEvaluator
+from models.diarization import ElevenLabsTranscriber
+from utils.storageconnector import S3ProjectUploader
+from utils.config import get_settings
+local_settings = get_settings()
 
 class TranscriberApp:
     def __init__(self, settings: AppSettings, manager: ProjectStructureManager):
@@ -26,21 +31,24 @@ class TranscriberApp:
         self.project_base = manager.project_root
         self.input_root = manager.input_root
         self.output_root = manager.output_root
+        self.base_lang = manager.base_language
 
-        base_lang = manager.base_language
+        # Input folders
+        self.input_paths = {
+            "songs": {
+                "video": self.input_root / self.base_lang /"songs"/ "song_files",
+                "audio": self.input_root / self.base_lang /"songs" / "audio_files",
+                "srt": self.input_root / self.base_lang /"songs" /  "srt_files",
+            },
+            "story": {
+                "video": self.input_root /self.base_lang / "story" / "story_files",
+                "audio": self.input_root /self.base_lang / "story" /  "audio_files",
+                "srt": self.input_root /self.base_lang /  "story" / "srt_files",
+            }
+        }
 
-        # ✅ Input folders (songs + story)
-        self.song_video_path = self.input_root / "songs" / base_lang / "song_files"
-        self.story_video_path = self.input_root / "story" / base_lang / "story_files"
-
-        self.song_audio_path = self.input_root / "songs" / base_lang / "audio_files"
-        self.story_audio_path = self.input_root / "story" / base_lang / "audio_files"
-
-        self.song_srt_path = self.input_root / "songs" / base_lang / "srt_files"
-        self.story_srt_path = self.input_root / "story" / base_lang / "srt_files"
-
-        # ✅ Output folders per language
-        self.lang_output_paths = {
+        # Output folders per language
+        self.output_paths = {
             lang: {
                 "songs": {
                     "srt": self.output_root / lang / "songs" / "srt_files",
@@ -58,135 +66,204 @@ class TranscriberApp:
 
     @log_exceptions("Video processing pipeline failed")
     def run(self, selected_steps: list[str] = None):
-        self.logger.info("🎬 Starting multilingual transcription pipeline")
-
+        self.logger.info("🎬 Starting multilingual Transcriber & Voiceover pipeline")
         selected_steps = set(selected_steps or [
             "audio_extract", "transcription", "subtitle_translation",
-             "subtitle_embedding", "evaluation"])
+            "subtitle_embedding", "evaluation", "diarization", "upload_to_s3", "download_from_s3", "final_merge" ])
 
-        # Example: process only songs
-        song_segments = FileUtils.list_mp4_files(dirpath=self.song_video_path)
-        input_output_path_song = [
-            (
-                os.path.join(self.song_video_path, seg),
-                os.path.join(self.song_audio_path, f"{Path(seg).stem}__audio.mp3")
-            )
+        # -------------------- SONGS PIPELINE --------------------
+        song_video_dir = self.input_paths["songs"]["video"]
+        song_audio_dir = self.input_paths["songs"]["audio"]
+        song_srt_dir = self.input_paths["songs"]["srt"]
+
+        song_segments = FileUtils.list_mp4_files(dirpath=song_video_dir)
+        song_input_output_pairs = [
+            (os.path.join(song_video_dir, seg), os.path.join(song_audio_dir, f"{Path(seg).stem}__audio.mp3"))
             for seg in song_segments
         ]
-
-        story_segments = FileUtils.list_mp4_files(dirpath=self.story_video_path)
-        input_output_path_story= [
-            (
-                os.path.join(self.story_video_path, seg),
-                os.path.join(self.story_audio_path, f"{Path(seg).stem}__audio.mp3")
-            )
-            for seg in story_segments
-        ]
-
-
+       
         if "audio_extract" in selected_steps:
-            AudioExtractor().extract_audio_batch(input_output_pairs=input_output_path_song)
-            AudioExtractor().extract_audio_batch(input_output_pairs=input_output_path_story)
+            AudioExtractor().extract_audio_batch(input_output_pairs=song_input_output_pairs)
 
         for seg in song_segments:
             base_name = Path(seg).stem
-            video_path = os.path.join(self.song_video_path, seg)
-            audio_path = os.path.join(self.song_audio_path, f"{base_name}__audio.mp3")
-            srt_path = os.path.join(self.song_srt_path, f"{base_name}__SRTfile.srt")
-
-            # Use transcription as before
+            video_path = os.path.join(song_video_dir, seg)
+            audio_path = os.path.join(song_audio_dir, f"{base_name}__audio.mp3")
+          
+            # --- Base language transcribing ---
             if "transcription" in selected_steps:
                 AudioTranscriptor().AudioTranscriptiontoFile(
                     model=self.model,
                     inputpath=audio_path,
-                    languagestoconvert=self.settings.languages_to_convert,
-                    outputfolder=self.song_srt_path,
-                    outputpath=f"{base_name}__SRTfile.srt",
+                    base_lnaguage = self.base_lang,
+                    tgt_lang=self.base_lang,
+                    outputfolder=song_srt_dir,  
+                    outputpath=f"{base_name}__{self.base_lang}_SRTfile.srt",
                     do_transcription=True,
-                    do_translation=False 
+                    do_translation=False
                 )
-
-            if "subtitle_translation" in selected_steps:
-                AudioTranscriptor().AudioTranscriptiontoFile(
-                    model=self.model,
-                    inputpath=audio_path,
-                    languagestoconvert=self.settings.languages_to_convert,
-                    outputfolder=self.song_srt_path,
-                    outputpath=f"{base_name}__SRTfile.srt",
-                    do_transcription=False,
-                    do_translation=True 
-                )
-
-            if "subtitle_embedding" in selected_steps:
-                VideoProcessor().burn_subtitles(
-                    languages=self.settings.languages_to_convert,
-                    video_path=video_path,
-                    subtitle_filename=f"{base_name}__SRTfile.srt",
-                    subtitle_dir=self.song_srt_path,
-                    output_filename=f"{base_name}__subtitled.mp4",
-                    output_dir=self.subtitle_base_path
-                )
-                time.sleep(2)
-
-        if "evaluation" in selected_steps:
-            self.logger.info("📊 Starting evaluation using Gemini")
 
             for lang in self.settings.languages_to_convert:
-                if lang == "Base":
+
+                # --- Translated subtitle generation ---
+                if "subtitle_translation" in selected_steps:                
+                    AudioTranscriptor().AudioTranscriptiontoFile(
+                        model=self.model,
+                        inputpath=song_srt_dir,
+                        base_lnaguage = self.base_lang,
+                        tgt_lang=lang,
+                        outputfolder=self.output_paths[lang]["songs"]["srt"],  
+                        outputpath=f"{base_name}__{self.base_lang}_SRTfile.srt",
+                        do_transcription=False,
+                        do_translation=True
+                    )
+
+                # Subtitle embedding
+                if "subtitle_embedding" in selected_steps:              
+                    VideoProcessor().burn_subtitles(
+                        lang=lang,
+                        video_path=video_path,
+                        subtitle_filename=f"{base_name}__SRTfile.srt",
+                        subtitle_dir=self.output_paths[lang]["songs"]["srt"],
+                        output_filename=f"{base_name}__subtitled.mp4",
+                        output_dir=self.output_paths[lang]["songs"]["subtitle"]
+                    )
+                    time.sleep(1)
+        
+        # -------------------- STORY PIPELINE --------------------
+        story_video_dir = self.input_paths["story"]["video"]
+        story_audio_dir = self.input_paths["story"]["audio"]
+        story_srt_dir = self.input_paths["story"]["srt"]
+
+        story_segments = FileUtils.list_mp4_files(dirpath=story_video_dir)
+        story_input_output_pairs = [
+            (os.path.join(story_video_dir, seg), os.path.join(story_audio_dir, f"{Path(seg).stem}__audio.mp3"))
+            for seg in story_segments
+        ]
+
+        if "audio_extract" in selected_steps:
+            AudioExtractor().extract_audio_batch(input_output_pairs=story_input_output_pairs)
+
+        for seg in story_segments:
+            base_name = Path(seg).stem
+            srt_path = os.path.join(story_srt_dir, f"{base_name}__hi_SRTfile.srt")
+            audio_path = os.path.join(story_audio_dir, f"{base_name}__audio.mp3")
+            
+            # --- Base language transcribing ---
+            if "diarization" in selected_steps:  
+                transcriber = ElevenLabsTranscriber()
+                transcriber.run_transcription(file_path=audio_path, output_file=srt_path)
+                    
+        if "upload_to_s3" in selected_steps:
+            uploader = S3ProjectUploader(
+                bucket_name=local_settings.s3_bucket_name,
+                s3_prefix=self.movie_name,
+                dry_run=False) # ✅ Set to True to simulate uploads safely
+            uploader.upload_project(self.project_base)
+
+        # -------------------- SONGS EVALUATION --------------------
+        if "evaluation1" in selected_steps:
+            self.logger.info("📊 Starting evaluation for SONGS")
+
+            for lang in self.settings.languages_to_convert:
+                if lang == self.base_lang:
                     continue
 
-                base_srt_dir = os.path.join(self.srt_base_path, "Base")
-                tgt_srt_dir = os.path.join(self.srt_base_path, lang)
-                eval_dir = os.path.join(self.evaluation_base_path, lang)
-                lang_code = LANGUAGES[lang]
+                eval_dir_base = self.output_paths[lang]["songs"]["evaluation"]
+                base_srt_dir = self.input_paths["songs"]["srt"]
+                tgt_srt_dir = self.output_paths[lang]["songs"]["srt"]
 
                 for srt_file in natsorted(os.listdir(base_srt_dir)):
                     if not srt_file.endswith(".srt"):
                         continue
-                                        
+
                     src_file = os.path.join(base_srt_dir, srt_file)
-                    tgt_file = os.path.join(tgt_srt_dir, srt_file.replace("__hi_", f"__{lang_code}_"))
-                    out_csv = os.path.join(eval_dir, srt_file.replace(".srt", f"__{lang_code}_eval.csv"))
+                    tgt_file = os.path.join(
+                        tgt_srt_dir,
+                        srt_file.replace(f"__{self.base_lang}_", f"__{lang}_")
+                    )
+                    out_csv = os.path.join(
+                        eval_dir_base,
+                        srt_file.replace(".srt", f"__{LANGUAGES[lang]}_eval.csv")
+                    )
 
                     if os.path.exists(tgt_file):
-                        self.logger.info(f"📝 Evaluating {src_file} vs {tgt_file}")
+                        self.logger.info(f"📝 Evaluating SONG subtitle: {src_file} vs {tgt_file}")
                         TranslationEvaluator().validate_pair_gemini(
                             src_file=src_file,
                             tgt_file=tgt_file,
                             out_csv=out_csv,
-                            src_lang="Hindi",
+                            src_lang=self.base_lang,
                             tgt_lang=lang
                         )
                     else:
-                        self.logger.warning(f"⚠️ Missing target SRT file for evaluation: {tgt_file}")
+                        self.logger.warning(f"⚠️ Missing SONG target SRT for evaluation: {tgt_file}")
 
-            for lang in self.settings.languages_to_convert:
-                eval_dir = os.path.join(self.evaluation_base_path, lang)
-                final_eval_csv = os.path.join(self.evaluation_base_path, f"{self.movie_name}__final_eval_{lang}.csv")
-                TranslationEvaluator().merge_all_csvs(input_dir=eval_dir, output_file=final_eval_csv)
-
-                try:
-                    rmtree(eval_dir)
-                    self.logger.info(f"🧹 Deleted evaluation temp folder: {eval_dir}")
-                except Exception as e:
-                    self.logger.warning(f"⚠️ Failed to delete folder {eval_dir}: {e}")
-        
-
-        for seg in story_segments:
-            base_name = Path(seg).stem
-            video_path = os.path.join(self.song_video_path, seg)
-            audio_path = os.path.join(self.song_audio_path, f"{base_name}__audio.mp3")
-            srt_path = os.path.join(self.song_srt_path, f"{base_name}__SRTfile.srt")
-
-            # Use transcription as before
-            if "transcription" in selected_steps:
-                AudioTranscriptor().AudioTranscriptiontoFile(
-                    model=self.model,
-                    inputpath=audio_path,
-                    languagestoconvert=self.settings.languages_to_convert,
-                    outputfolder=self.song_srt_path,
-                    outputpath=f"{base_name}__SRTfile.srt",
-                    do_transcription=True,
-                    do_translation=False 
+                final_eval_csv = os.path.join(
+                    eval_dir_base,
+                    f"{self.movie_name}__songs_final_eval_{lang}.csv"
+                )
+                TranslationEvaluator().merge_all_csvs(
+                    input_dir=eval_dir_base, output_file=final_eval_csv
                 )
 
+                # try:
+                #     rmtree(eval_dir_base)
+                #     self.logger.info(f"🧹 Deleted SONG evaluation temp folder: {eval_dir_base}")
+                # except Exception as e:
+                #     self.logger.warning(f"⚠️ Failed to delete SONG evaluation folder {eval_dir_base}: {e}")
+
+        # -------------------- STORY EVALUATION --------------------
+        if "evaluation_story" in selected_steps:
+            self.logger.info("📊 Starting evaluation for STORY")
+
+            for lang in self.settings.languages_to_convert:
+                if lang == self.base_lang:
+                    continue
+
+                eval_dir_base = self.output_paths[lang]["story"]["evaluation"]
+                base_srt_dir = self.input_paths["story"]["srt"]
+                tgt_srt_dir = self.output_paths[lang]["story"]["srt"]
+
+
+                for srt_file in natsorted(os.listdir(base_srt_dir)):
+                    if not srt_file.endswith(".srt"):
+                        continue
+
+                    src_file = os.path.join(base_srt_dir, srt_file)
+                    tgt_file = os.path.join(
+                        tgt_srt_dir,
+                        srt_file.replace(f"__{self.base_lang}_", f"__{lang}_")
+                    )
+                    out_csv = os.path.join(
+                        eval_dir_base,
+                        srt_file.replace(".srt", f"__{LANGUAGES[lang]}_eval.csv")
+                    )
+
+                    if os.path.exists(tgt_file):
+                        self.logger.info(f"📝 Evaluating STORY subtitle: {src_file} vs {tgt_file}")
+                        TranslationEvaluator().validate_pair_gemini(
+                            src_file=src_file,
+                            tgt_file=tgt_file,
+                            out_csv=out_csv,
+                            src_lang=self.base_lang,
+                            tgt_lang=lang
+                        )
+                    else:
+                        self.logger.warning(f"⚠️ Missing STORY target SRT for evaluation: {tgt_file}")
+
+                final_eval_csv = os.path.join(
+                    eval_dir_base,
+                    f"{self.movie_name}__story_final_eval_{lang}.csv"
+                )
+                TranslationEvaluator().merge_all_csvs(
+                    input_dir=eval_dir_base, output_file=final_eval_csv
+                )
+
+                # try:
+                #     rmtree(eval_dir_base)
+                #     self.logger.info(f"🧹 Deleted STORY evaluation temp folder: {eval_dir_base}")
+                # except Exception as e:
+                #     self.logger.warning(f"⚠️ Failed to delete STORY evaluation folder {eval_dir_base}: {e}")
+
+ 

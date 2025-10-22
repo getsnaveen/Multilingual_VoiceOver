@@ -141,35 +141,35 @@ class VideoProcessor:
         self.logger.info(f"Merged video saved to {output_path}")
 
     @log_exceptions()
-    def burn_subtitles(self, languages, video_path, subtitle_filename, subtitle_dir, output_filename, output_dir):
+    def burn_subtitles(self, lang, video_path, subtitle_filename, subtitle_dir, output_filename, output_dir):
         filename_prefix = subtitle_filename.split("__")[0]
         filename_prefix_output = output_filename.split("__")[0]
-        for lang in languages:
-            lang_code = LANGUAGES[lang]
-            translated_filename = f"{filename_prefix}__{lang_code}_SRTfile.srt"
-            output_filename = f"{filename_prefix_output}__{lang_code}_subtitled.mp4"
-            subtitle_path = os.path.join(subtitle_dir, lang, translated_filename)
-            output_path = os.path.join(output_dir, lang, output_filename)
-            translated_filename_ass = f"{filename_prefix}__{lang_code}_ASSfile.ass"
-            ass_path = os.path.join(subtitle_dir, lang, translated_filename_ass)
-            
-            self.logger.info(f"✅ subtitle_path: {subtitle_path}")
-            self.logger.info(f"✅ ass_path  : {ass_path}")
+        # for lang in languages:
+        lang_code = LANGUAGES[lang]
+        translated_filename = f"{filename_prefix}__{lang_code}_SRTfile.srt"
+        output_filename = f"{filename_prefix_output}__{lang_code}_subtitled.mp4"
+        subtitle_path = os.path.join(subtitle_dir, translated_filename)
+        output_path = os.path.join(output_dir, output_filename)
+        translated_filename_ass = f"{filename_prefix}__{lang_code}_ASSfile.ass"
+        ass_path = os.path.join(subtitle_dir, translated_filename_ass)
+        
+        self.logger.info(f"✅ subtitle_path: {subtitle_path}")
+        self.logger.info(f"✅ ass_path  : {ass_path}")
 
-            self.create_ass_file(subtitle_path, ass_path, lang_code)
-            self.logger.info(f"✅ ASS file created: {ass_path}")
+        self.create_ass_file(subtitle_path, ass_path, lang_code)
+        self.logger.info(f"✅ ASS file created: {ass_path}")
 
-            self.logger.info(f"Burning subtitles for {lang} -> {subtitle_path}")
-            command = [
-                "ffmpeg", "-y",
-                "-i", str(video_path),
-                "-vf", f"ass={ass_path}",
-                "-c:a", "copy",
-                str(output_path)
-            ]
+        self.logger.info(f"Burning subtitles for {lang} -> {subtitle_path}")
+        command = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-vf", f"ass={ass_path}",
+            "-c:a", "copy",
+            str(output_path)
+        ]
 
-            subprocess.run(command)
-            self.logger.info(f"Output saved to: {output_path}")
+        subprocess.run(command)
+        self.logger.info(f"Output saved to: {output_path}")
     
     @log_exceptions()
     def convert_srt_time_to_ass(self, srt_time: str) -> str:

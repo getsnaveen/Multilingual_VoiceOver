@@ -58,7 +58,8 @@ class AudioTranscriptor(Transcribe):
         self,
         model,
         inputpath: str,
-        languagestoconvert: list,
+        base_lnaguage:str,
+        tgt_lang: list,
         outputfolder: str,
         outputpath: str,
         do_transcription: bool = True,
@@ -83,14 +84,14 @@ class AudioTranscriptor(Transcribe):
             outputpath (str): Filename (with extension) for subtitle output.
             *args, **kwargs: Additional keyword arguments (currently unused).
         """
-       
         self.logger.info("Starting transcription")
         filename_prefix = outputpath.split("__")[0]
-        outputpath_updated = f"{filename_prefix}__hi_SRTfile.srt"
-        basepath = os.path.join(outputfolder, "Base", outputpath_updated)
-        os.makedirs(os.path.dirname(basepath), exist_ok=True)
+        outputpath_updated = f"{filename_prefix}__hi_SRTfile.srt"     
+        basepath = os.path.join(outputfolder, outputpath_updated)
+    
+        if do_transcription and (base_lnaguage == tgt_lang):            
+            os.makedirs(os.path.dirname(basepath), exist_ok=True)
 
-        if do_transcription:
             self.logger.info("🎙️ Starting transcription")
             AudioTranscriptorElevenLabs().AudioTranscriptiontoSRT(
                 inputpath=inputpath,
@@ -103,20 +104,19 @@ class AudioTranscriptor(Transcribe):
 
         if do_translation:
             self.logger.info("🌍 Starting translation to target languages")
-            for to_lang in languagestoconvert:
-                lang_code = LANGUAGES[to_lang]
-                translated_filename = f"{filename_prefix}__{lang_code}_SRTfile.srt"
-                translated_folder = os.path.join(outputfolder, to_lang)
-                os.makedirs(translated_folder, exist_ok=True)
-                translated_path = os.path.join(translated_folder, translated_filename)
-
-                self.srt_trnaslator.translate_srt_file_batch_with_google_translate(
-                    input_path=basepath,
-                    output_path=translated_path,
-                    target_language=lang_code
-                )
-                self.logger.info(f"✅ SRT file generated for '{to_lang}' at {translated_path}")
-                time.sleep(1)
+            # for to_lang in languagestoconvert:
+            lang_code = LANGUAGES[tgt_lang]
+            translated_filename = f"{filename_prefix}__{lang_code}_SRTfile.srt"
+            translated_path = os.path.join(outputfolder, translated_filename)
+            inputpath = os.path.join(inputpath, outputpath_updated)
+           
+            self.srt_trnaslator.translate_srt_file_batch_with_google_translate(
+                input_path=inputpath,
+                output_path=translated_path,
+                target_language=lang_code
+            )
+            self.logger.info(f"✅ SRT file generated for '{tgt_lang}' at {translated_path}")
+            time.sleep(1)
         else:
             self.logger.info("ℹ️ Skipping translation")
 

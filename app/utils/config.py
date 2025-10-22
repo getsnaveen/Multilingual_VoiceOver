@@ -31,7 +31,7 @@ class AppSettings(BaseSettings):
     input_audio_path: str
     languages_to_convert: List[str]
     segment_length: int
-    
+        
     elevenlabs_key: str
     elevenlabs_url: str
     elevenlabs_modelid: str
