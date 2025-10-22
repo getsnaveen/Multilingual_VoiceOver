@@ -69,7 +69,7 @@ class SegmentExtractor:
 # FFmpeg Handler Class
 # ---------------------------------------------------------------------
 class FFmpegHandler:
-    def extract_segments(self, video_path: str, segments: List[Dict], output_dir: str = "clips") -> List[Dict]:
+    def extract_segments(self, video_path: str, segments: List[Dict], output_dir: str = "clips", lang_suffix: str = "") -> List[Dict]:
         os.makedirs(output_dir, exist_ok=True)
         outputs = []
         ext = os.path.splitext(video_path)[1].lstrip(".")
@@ -87,12 +87,11 @@ class FFmpegHandler:
                 seg_id_num = int(seg_id)
             except (ValueError, TypeError):
                 raise ValueError(f"❌ Invalid segment ID '{seg_id}' — expected a numeric value.")
-
+            
             out_file = os.path.join(
-                output_dir,
-                f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}.{ext}"
-            )
-
+                            output_dir,
+                            f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}_{lang_suffix}.{ext}"
+                        )
 
             ffmpeg.input(video_path, ss=start, t=duration).output(out_file, c="copy").overwrite_output().run(quiet=True)
             outputs.append({
@@ -276,7 +275,7 @@ class VideoProcessor:
     # ---------------------------------------------------------------
     # Phase 1: Extract Segments Only (No Concatenation)
     # ---------------------------------------------------------------
-    def extract_segments(self, label: str):
+    def extract_segments(self, label: str, lang_suffix:str):
         """
         Extracts video segments by label and saves them into the project folder.
         This phase runs first and can be validated by a human.
@@ -305,7 +304,8 @@ class VideoProcessor:
             song_clips = self.ffmpeg.extract_segments(
                 str(self.input_video),
                 song_segments,
-                str(song_dir)
+                str(song_dir),
+                lang_suffix = lang_suffix
             )
         else:
             logger.warning("⚠️ No song segments found in JSON.")
@@ -318,7 +318,8 @@ class VideoProcessor:
             story_clips = self.ffmpeg.extract_segments(
                 str(self.input_video),
                 voice_segments,
-                str(story_dir)
+                str(story_dir),
+                lang_suffix = lang_suffix
             )
         else:
             logger.warning("⚠️ No voice/story segments found in JSON.")
@@ -386,4 +387,4 @@ if __name__ == "__main__":
 
     # Initialize Video Processor using existing structure
     processor = VideoProcessor(manager)
-    processor.extract_segments(label="song")
+    processor.extract_segments(label="song",lang_suffix="hi")
