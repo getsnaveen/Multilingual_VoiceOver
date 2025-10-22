@@ -360,31 +360,31 @@ class VideoProcessor:
 # ---------------------------------------------------------------------
 # Example Usage
 # ---------------------------------------------------------------------
-if __name__ == "__main__":
-    manager = ProjectStructureManager(
-        input_movie_path="/home/csc/Documents/Test1/rishtey.mp4",
-        base_language="BaseLanguage",
-        target_languages=[
-            "Malay",
-            "Bhasa",
-            "Arabic",
-            "Swahili",
-            "Sinhala",
-            "Telugu",
-            "Tamil",
-            "Kannada",
-            "Malayalam",
-            "Marathi",
-            "Gujarati",
-            "Bhojpuri",
-        ],
-        story_json_path="/home/csc/Documents/Test1/rishtey_labeled_chunks.json",
-    )
+# if __name__ == "__main__":
+#     manager = ProjectStructureManager(
+#         input_movie_path="/home/csc/Documents/Test1/rishtey.mp4",
+#         base_language="BaseLanguage",
+#         target_languages=[
+#             "Malay",
+#             "Bhasa",
+#             "Arabic",
+#             "Swahili",
+#             "Sinhala",
+#             "Telugu",
+#             "Tamil",
+#             "Kannada",
+#             "Malayalam",
+#             "Marathi",
+#             "Gujarati",
+#             "Bhojpuri",
+#         ],
+#         story_json_path="/home/csc/Documents/Test1/rishtey_labeled_chunks.json",
+#     )
 
-    # Create full structured folder tree and move files
-    project_root = manager.create_structure(move_files=True)
-    print(f"✅ Project ready at: {project_root}")
+#     # Create full structured folder tree and move files
+#     project_root = manager.create_structure(move_files=True)
+#     print(f"✅ Project ready at: {project_root}")
 
-    # Initialize Video Processor using existing structure
-    processor = VideoProcessor(manager)
-    processor.extract_segments(label="song",lang_suffix="hi")
+#     # Initialize Video Processor using existing structure
+#     processor = VideoProcessor(manager)
+#     processor.extract_segments(label="song",lang_suffix="hi")

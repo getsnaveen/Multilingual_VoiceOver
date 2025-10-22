@@ -43,9 +43,9 @@ class TranslationEvaluator:
 
     @log_exceptions()
     def generate_srt_triples(self, hi_dir: str, id_dir: str, en_dir: str,
-                             hi_suffix="_hi_SRTfile.srt",
-                             id_suffix="_id_SRTfile.srt",
-                             en_suffix="_en_SRTfile.srt") -> List[Tuple[str, str, str]]:
+                             hi_suffix="_hi.srt",
+                             id_suffix="_id.srt",
+                             en_suffix="_en.srt") -> List[Tuple[str, str, str]]:
         """
         Returns a list of (hi_file, id_file, en_file) triples with matching stems.
         """

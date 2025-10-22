@@ -151,7 +151,7 @@ with tab2:
             )
             manager.create_structure(move_files=True)
             processor = VideoProcessor(manager)
-            processor.extract_segments(label="song")
+            processor.extract_segments(label="song",lang_suffix="hi")
 
             # Run unified TranscriberApp pipeline
             app = TranscriberApp(settings, manager)
