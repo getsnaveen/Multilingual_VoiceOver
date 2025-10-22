@@ -78,7 +78,7 @@ class TranscriberApp:
 
         song_segments = FileUtils.list_mp4_files(dirpath=song_video_dir)
         song_input_output_pairs = [
-            (os.path.join(song_video_dir, seg), os.path.join(song_audio_dir, f"{Path(seg).stem}__audio.mp3"))
+            (os.path.join(song_video_dir, seg), os.path.join(song_audio_dir, f"{Path(seg).stem}.mp3"))
             for seg in song_segments
         ]
        
@@ -88,7 +88,7 @@ class TranscriberApp:
         for seg in song_segments:
             base_name = Path(seg).stem
             video_path = os.path.join(song_video_dir, seg)
-            audio_path = os.path.join(song_audio_dir, f"{base_name}__audio.mp3")
+            audio_path = os.path.join(song_audio_dir, f"{base_name}.mp3")
           
             # --- Base language transcribing ---
             if "transcription" in selected_steps:
@@ -98,7 +98,7 @@ class TranscriberApp:
                     base_lnaguage = self.base_lang,
                     tgt_lang=self.base_lang,
                     outputfolder=song_srt_dir,  
-                    outputpath=f"{base_name}__{self.base_lang}_SRTfile.srt",
+                    outputpath=f"{base_name}__{self.base_lang}.srt",
                     do_transcription=True,
                     do_translation=False
                 )
@@ -113,7 +113,7 @@ class TranscriberApp:
                         base_lnaguage = self.base_lang,
                         tgt_lang=lang,
                         outputfolder=self.output_paths[lang]["songs"]["srt"],  
-                        outputpath=f"{base_name}__{self.base_lang}_SRTfile.srt",
+                        outputpath=f"{base_name}__{self.base_lang}.srt",
                         do_transcription=False,
                         do_translation=True
                     )
@@ -123,7 +123,7 @@ class TranscriberApp:
                     VideoProcessor().burn_subtitles(
                         lang=lang,
                         video_path=video_path,
-                        subtitle_filename=f"{base_name}__SRTfile.srt",
+                        subtitle_filename=f"{base_name}.srt",
                         subtitle_dir=self.output_paths[lang]["songs"]["srt"],
                         output_filename=f"{base_name}__subtitled.mp4",
                         output_dir=self.output_paths[lang]["songs"]["subtitle"]
@@ -137,7 +137,7 @@ class TranscriberApp:
 
         story_segments = FileUtils.list_mp4_files(dirpath=story_video_dir)
         story_input_output_pairs = [
-            (os.path.join(story_video_dir, seg), os.path.join(story_audio_dir, f"{Path(seg).stem}__audio.mp3"))
+            (os.path.join(story_video_dir, seg), os.path.join(story_audio_dir, f"{Path(seg).stem}.mp3"))
             for seg in story_segments
         ]
 
@@ -146,8 +146,8 @@ class TranscriberApp:
 
         for seg in story_segments:
             base_name = Path(seg).stem
-            srt_path = os.path.join(story_srt_dir, f"{base_name}__hi_SRTfile.srt")
-            audio_path = os.path.join(story_audio_dir, f"{base_name}__audio.mp3")
+            srt_path = os.path.join(story_srt_dir, f"{base_name}__hi.srt")
+            audio_path = os.path.join(story_audio_dir, f"{base_name}.mp3")
             
             # --- Base language transcribing ---
             if "diarization" in selected_steps:  

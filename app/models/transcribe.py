@@ -86,7 +86,7 @@ class AudioTranscriptor(Transcribe):
         """
         self.logger.info("Starting transcription")
         filename_prefix = outputpath.split("__")[0]
-        outputpath_updated = f"{filename_prefix}__hi_SRTfile.srt"     
+        outputpath_updated = f"{filename_prefix}.srt"     
         basepath = os.path.join(outputfolder, outputpath_updated)
     
         if do_transcription and (base_lnaguage == tgt_lang):            
@@ -106,7 +106,10 @@ class AudioTranscriptor(Transcribe):
             self.logger.info("🌍 Starting translation to target languages")
             # for to_lang in languagestoconvert:
             lang_code = LANGUAGES[tgt_lang]
-            translated_filename = f"{filename_prefix}__{lang_code}_SRTfile.srt"
+            base_name = outputpath.rsplit("_", 1)[0]  # removes the last "_hi.mp4"
+            filename_prefix_new = base_name.replace(".mp4", "")
+
+            translated_filename = f"{filename_prefix_new}__{lang_code}.srt"
             translated_path = os.path.join(outputfolder, translated_filename)
             inputpath = os.path.join(inputpath, outputpath_updated)
            
