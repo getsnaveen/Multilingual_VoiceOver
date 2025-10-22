@@ -89,9 +89,10 @@ class FFmpegHandler:
                 raise ValueError(f"❌ Invalid segment ID '{seg_id}' — expected a numeric value.")
 
             out_file = os.path.join(
-                    output_dir,
-                    f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}_{lang_suffix}.{ext}"
-                )
+                output_dir,
+                f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}.{ext}"
+            )
+
 
             ffmpeg.input(video_path, ss=start, t=duration).output(out_file, c="copy").overwrite_output().run(quiet=True)
             outputs.append({
@@ -275,46 +276,64 @@ class VideoProcessor:
     # ---------------------------------------------------------------
     # Phase 1: Extract Segments Only (No Concatenation)
     # ---------------------------------------------------------------
-    def extract_segments(
-        self,
-        video_path: str,
-        segments: List[Dict],
-        output_dir: str = "clips",
-        lang_suffix: Optional[str] = None
-    ) -> List[Dict]:
-        os.makedirs(output_dir, exist_ok=True)
-        outputs = []
-        ext = os.path.splitext(video_path)[1].lstrip(".")
-        movie_name = os.path.splitext(os.path.basename(video_path))[0]
-        suffix = f"_{lang_suffix}" if lang_suffix else ""
+    def extract_segments(self, label: str):
+        """
+        Extracts video segments by label and saves them into the project folder.
+        This phase runs first and can be validated by a human.
+        """
+        # 🔹 Extract segments of the requested label
+        label_segments = self.extractor.extract_segments_by_label(label)
+        video_duration = self.ffmpeg.get_video_duration(str(self.input_video))
+        logger.info(f"🎞️ Total video duration: {video_duration}")
 
-        for seg in segments:
-            seg_id = seg.get("id")
-            start, end = seg["start"], seg["end"]
-            duration = TimeUtils.time_to_seconds(end) - TimeUtils.time_to_seconds(start)
-            start_str = start.replace(":", "-")
-            end_str = end.replace(":", "-")
+        # 🔹 Always fetch both sets for clarity
+        song_segments = self.extractor.extract_segments_by_label("song")
+        voice_segments = self.extractor.extract_segments_by_label("voice")
 
-            try:
-                seg_id_num = int(seg_id)
-            except (ValueError, TypeError):
-                raise ValueError(f"❌ Invalid segment ID '{seg_id}' — expected a numeric value.")
+         # 🔹 Assign based on what we’re processing
+        song_clips, story_clips = [], []
 
-            out_file = os.path.join(
-                output_dir,
-                f"{movie_name}_{seg_id_num:03d}_{start_str}_to_{end_str}{suffix}.{ext}"
+        base_lang = self.project_manager.base_language
+        song_dir = self.project_manager.input_root / base_lang / "songs" / "song_files"
+        story_dir = self.project_manager.input_root / base_lang / "story" / "story_files"
+
+        # -----------------------------------------------------------------
+        # SONG SEGMENTS
+        # -----------------------------------------------------------------
+        if song_segments:
+            logger.info(f"🎶 Found {len(song_segments)} song segments. Extracting...")
+            song_clips = self.ffmpeg.extract_segments(
+                str(self.input_video),
+                song_segments,
+                str(song_dir)
             )
+        else:
+            logger.warning("⚠️ No song segments found in JSON.")
 
-            ffmpeg.input(video_path, ss=start, t=duration).output(out_file, c="copy").overwrite_output().run(quiet=True)
-            outputs.append({
-                "file": out_file,
-                "id": seg_id,
-                "start": start,
-                "end": end
-            })
+        # -----------------------------------------------------------------
+        # STORY / VOICE SEGMENTS
+        # -----------------------------------------------------------------
+        if voice_segments:
+            logger.info(f"🗣️ Found {len(voice_segments)} story segments. Extracting...")
+            story_clips = self.ffmpeg.extract_segments(
+                str(self.input_video),
+                voice_segments,
+                str(story_dir)
+            )
+        else:
+            logger.warning("⚠️ No voice/story segments found in JSON.")
 
-        logger.info(f"Extracted {len(outputs)} clips into '{output_dir}/'.")
-        return outputs
+        all_segments = song_clips + story_clips
+        # ✅ Sort by ID first, then start time (for consistency)
+        all_segments_sorted = sorted(
+            all_segments,
+            key=lambda x: (int(x.get("id", 0)), TimeUtils.time_to_seconds(x["start"])))
+
+        self.extracted_segments = all_segments_sorted
+        logger.info(f"✅ Extracted total {len(all_segments_sorted)} clips (songs + story).")
+        logger.info("✅ Segment extraction completed successfully (no concatenation yet).")
+
+        return all_segments_sorted
 
     # ---------------------------------------------------------------
     # Phase 2: Explicit Concatenation (Triggered After Human Validation)
