@@ -85,14 +85,9 @@ class AudioTranscriptor(Transcribe):
             *args, **kwargs: Additional keyword arguments (currently unused).
         """
         self.logger.info("Starting transcription")
-        print("outputpath :::", outputpath)
         filename_prefix = outputpath.rsplit("_hi", 1)[0] 
-        print("filename_prefix :::", filename_prefix)
         outputpath_updated = f"{filename_prefix}.srt"     
-        print("outputpath_updated :::", outputpath_updated)
         basepath = os.path.join(outputfolder, outputpath)
-        print("basepath :::", basepath)
-        print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
         if do_transcription and (base_lnaguage == tgt_lang):            
             os.makedirs(os.path.dirname(basepath), exist_ok=True)
 
@@ -111,14 +106,10 @@ class AudioTranscriptor(Transcribe):
             # for to_lang in languagestoconvert:
             lang_code = LANGUAGES[tgt_lang]
             filename_prefix_new = outputpath.rsplit("_hi", 1)[0]  # removes the last "_hi.mp4"
-            print("filename_prefix_new :::", filename_prefix_new)
             translated_filename = f"{filename_prefix_new}_{lang_code}.srt"
-            print("translated_filename :::", translated_filename)
             translated_path = os.path.join(outputfolder, translated_filename)
-            print("translated_path :::", translated_path)
             inputpath = os.path.join(inputpath, outputpath)
-            print("inputpath :::", inputpath)
-           
+                   
             self.srt_trnaslator.translate_srt_file_batch_with_google_translate(
                 input_path=inputpath,
                 output_path=translated_path,
