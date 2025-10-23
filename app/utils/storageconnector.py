@@ -1,6 +1,5 @@
 import os
 import boto3
-import logging
 from pathlib import Path
 from botocore.exceptions import BotoCoreError, NoCredentialsError, ClientError
 from utils.logger import SingletonLogger
@@ -11,16 +10,12 @@ local_settings = get_settings()
 
 class S3ProjectUploader:
     """
-    Uploads specific parts of a multilingual project to AWS S3:
-    - Input/story/BaseLanguage/{srt_files, story_files}
-    - Output/<Language>/story/{dubbed_files, srt_files}
-    Includes support for empty folder uploads (.keep placeholder).
+    Uploads multilingual project files to AWS S3 in a standardized structure:
+      ├── rawmovies/<project_name>/...         (from Input/BaseLanguage/story)
+      └── processedmovies/<project_name>/<Language>/story/...  (from Output/<Language>/story)
     """
 
     def __init__(self, bucket_name: str, s3_prefix: str = "", dry_run: bool = False):
-        """
-        Initialize S3 client and logger.
-        """
         self.logger = SingletonLogger.getInstance(self.__class__.__name__).logger
         self.bucket = bucket_name
         self.prefix = s3_prefix.strip("/")
@@ -39,16 +34,11 @@ class S3ProjectUploader:
             raise
 
     # -----------------------------
-    # Upload a single file
-    # -----------------------------
     def upload_file(self, file_path: Path, s3_key: str) -> bool:
-        """
-        Upload a single file to S3 (or simulate in dry-run mode).
-        """
+        """Uploads a single file (or simulates if dry_run=True)."""
         if self.dry_run:
             self.logger.info(f"[DRY RUN] Would upload: {file_path} → s3://{self.bucket}/{s3_key}")
             return True
-
         try:
             self.s3.upload_file(str(file_path), self.bucket, s3_key)
             self.logger.info(f"✅ Uploaded: {s3_key}")
@@ -58,17 +48,12 @@ class S3ProjectUploader:
             return False
 
     # -----------------------------
-    # Upload empty folder placeholder
-    # -----------------------------
     def upload_empty_folder_marker(self, folder: Path, s3_prefix: str) -> bool:
-        """
-        Uploads a '.keep' placeholder to represent an empty folder.
-        """
+        """Creates a '.keep' file in S3 for empty folders."""
         placeholder_key = f"{s3_prefix}/.keep"
         if self.dry_run:
             self.logger.info(f"[DRY RUN] Would create placeholder for empty folder: {placeholder_key}")
             return True
-
         try:
             self.s3.put_object(Bucket=self.bucket, Key=placeholder_key, Body=b"")
             self.logger.info(f"📂 Created placeholder for empty folder: {placeholder_key}")
@@ -78,68 +63,74 @@ class S3ProjectUploader:
             return False
 
     # -----------------------------
-    # Filtered recursive uploader
-    # -----------------------------
     def upload_project(self, project_root: str) -> int:
         """
-        Uploads only the filtered structure to S3:
-        Input/story/BaseLanguage/{srt_files, story_files}
-        Output/<Language>/story/{dubbed_files, srt_files}
+        Uploads:
+        - Input/BaseLanguage/story/{story_files,srt_files} → rawmovies/<project_name>/
+        - Output/<Language>/story/{dubbed_files,srt_files} → processedmovies/<project_name>/<Language>/story/
         """
         project_root = Path(project_root)
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
 
+        project_name = project_root.name
         upload_count = 0
 
-        # --- Input folder ---
-        input_story = project_root / "Input" / "BaseLanguage"/"story" 
+        # === Upload Input/BaseLanguage/story ===
+        input_story = project_root / "Input" / "BaseLanguage" / "story"
         if input_story.exists():
-            for sub in ["srt_files", "story_files"]:
-                subfolder = input_story / sub
-                if subfolder.exists():
-                    upload_count += self._upload_folder(
-                        subfolder,
-                        f"{self.prefix}/Input/BaseLanguage"
+            self.logger.info(f"🔍 Scanning Input/BaseLanguage/story for uploads...")
+            for subfolder in ["story_files", "srt_files"]:
+                sub_path = input_story / subfolder
+                if sub_path.exists():
+                    upload_count += self._upload_media_folder(
+                        folder=sub_path,
+                        s3_prefix=f"rawmovies/{project_name}"
                     )
 
-        # --- Output folders (languages) ---
+        # === Upload Output/<Language>/story ===
         output_dir = project_root / "Output"
         if output_dir.exists():
             for lang_dir in output_dir.iterdir():
                 if not lang_dir.is_dir():
                     continue
-                story_dir = lang_dir / "story"
-                if not story_dir.exists():
+
+                story_folder = lang_dir / "story"
+                if not story_folder.exists():
+                    self.logger.warning(f"⚠️ No 'story' folder found in {lang_dir}, skipping...")
                     continue
-                for sub in ["dubbed_files", "srt_files"]:
-                    subfolder = story_dir / sub
-                    if subfolder.exists():
-                        upload_count += self._upload_folder(
-                            subfolder,
-                            f"{self.prefix}/Output/{lang_dir.name}"
+
+                lang_name = lang_dir.name  # Keep the full language name (e.g. Tamil, Malayalam)
+                self.logger.info(f"🔍 Scanning story folder for {lang_name}...")
+
+                for subfolder in ["dubbed_files", "srt_files"]:
+                    sub_path = story_folder / subfolder
+                    if sub_path.exists():
+                        upload_count += self._upload_media_folder(
+                            folder=sub_path,
+                            s3_prefix=f"processedmovies/{project_name}/{lang_name}"
                         )
 
         self.logger.info(f"📦 Total files uploaded (including empty folders): {upload_count}")
         return upload_count
 
     # -----------------------------
-    # Helper: Upload files from a folder (handles empty dirs too)
-    # -----------------------------
-    def _upload_folder(self, folder: Path, s3_prefix: str) -> int:
+    def _upload_media_folder(self, folder: Path, s3_prefix: str) -> int:
+        """Uploads .mp4 and .srt files from a folder recursively."""
         count = 0
-        empty = True
+        media_found = False
+
         for root, _, files in os.walk(folder):
             for file_name in files:
-                empty = False
+                if not file_name.lower().endswith((".mp4", ".srt")):
+                    continue
+                media_found = True
                 file_path = Path(root) / file_name
-                rel_path = file_path.relative_to(folder)
-                s3_key = f"{s3_prefix}/{rel_path.as_posix()}"
+                s3_key = f"{s3_prefix}/{file_name}"
                 if self.upload_file(file_path, s3_key):
                     count += 1
 
-        if empty:
-            # Upload .keep file if no files found
+        if not media_found:
             if self.upload_empty_folder_marker(folder, s3_prefix):
                 count += 1
 
@@ -153,8 +144,8 @@ class S3ProjectUploader:
 #     try:
 #         uploader = S3ProjectUploader(
 #             bucket_name=local_settings.s3_bucket_name,
-#             s3_prefix="rishtey",
-#             dry_run=False,  # ✅ Set to True to simulate uploads safely
+#             s3_prefix="rishtey_new",
+#             dry_run=False,  # ✅ Test mode first
 #         )
 #         uploader.upload_project("/home/csc/Documents/Test1/rishtey")
 #     except Exception as e:

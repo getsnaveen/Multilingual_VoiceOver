@@ -85,10 +85,14 @@ class AudioTranscriptor(Transcribe):
             *args, **kwargs: Additional keyword arguments (currently unused).
         """
         self.logger.info("Starting transcription")
-        filename_prefix = outputpath.split("__")[0]
+        print("outputpath :::", outputpath)
+        filename_prefix = outputpath.rsplit("_hi", 1)[0] 
+        print("filename_prefix :::", filename_prefix)
         outputpath_updated = f"{filename_prefix}.srt"     
-        basepath = os.path.join(outputfolder, outputpath_updated)
-    
+        print("outputpath_updated :::", outputpath_updated)
+        basepath = os.path.join(outputfolder, outputpath)
+        print("basepath :::", basepath)
+        print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
         if do_transcription and (base_lnaguage == tgt_lang):            
             os.makedirs(os.path.dirname(basepath), exist_ok=True)
 
@@ -106,12 +110,14 @@ class AudioTranscriptor(Transcribe):
             self.logger.info("🌍 Starting translation to target languages")
             # for to_lang in languagestoconvert:
             lang_code = LANGUAGES[tgt_lang]
-            base_name = outputpath.rsplit("_", 1)[0]  # removes the last "_hi.mp4"
-            filename_prefix_new = base_name.replace(".mp4", "")
-
-            translated_filename = f"{filename_prefix_new}__{lang_code}.srt"
+            filename_prefix_new = outputpath.rsplit("_hi", 1)[0]  # removes the last "_hi.mp4"
+            print("filename_prefix_new :::", filename_prefix_new)
+            translated_filename = f"{filename_prefix_new}_{lang_code}.srt"
+            print("translated_filename :::", translated_filename)
             translated_path = os.path.join(outputfolder, translated_filename)
-            inputpath = os.path.join(inputpath, outputpath_updated)
+            print("translated_path :::", translated_path)
+            inputpath = os.path.join(inputpath, outputpath)
+            print("inputpath :::", inputpath)
            
             self.srt_trnaslator.translate_srt_file_batch_with_google_translate(
                 input_path=inputpath,
@@ -170,7 +176,7 @@ class AudioTranscriptorElevenLabs(ABC):
                 return
 
             result = response.json()
-            self.logger.info("✅ Transcription and translation completed")
+            self.logger.info("✅ Transcription completed")
 
             # Generate SRT segments
             self.audio_utils.write_srt_file(words=result["words"],

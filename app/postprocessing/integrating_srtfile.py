@@ -142,15 +142,18 @@ class VideoProcessor:
 
     @log_exceptions()
     def burn_subtitles(self, lang, video_path, subtitle_filename, subtitle_dir, output_filename, output_dir):
-        filename_prefix = subtitle_filename.split("__")[0]
-        filename_prefix_output = output_filename.split("__")[0]
+        
+        filename_prefix = subtitle_filename.rsplit('_', 1)[0].replace('.srt', '')
+        filename_prefix_output = subtitle_filename.rsplit('_', 1)[0].replace('.srt', '')
+        self.logger.info(f"✅ filename_prefix: {filename_prefix}")
+        self.logger.info(f"✅ filename_prefix_output  : {filename_prefix_output}")
         # for lang in languages:
         lang_code = LANGUAGES[lang]
-        translated_filename = f"{filename_prefix}__{lang_code}_SRTfile.srt"
-        output_filename = f"{filename_prefix_output}__{lang_code}_subtitled.mp4"
+        translated_filename = f"{filename_prefix}_{lang_code}.srt"
+        output_filename = f"{filename_prefix_output}_{lang_code}_subtitled.mp4"
         subtitle_path = os.path.join(subtitle_dir, translated_filename)
         output_path = os.path.join(output_dir, output_filename)
-        translated_filename_ass = f"{filename_prefix}__{lang_code}_ASSfile.ass"
+        translated_filename_ass = f"{filename_prefix}_{lang_code}.ass"
         ass_path = os.path.join(subtitle_dir, translated_filename_ass)
         
         self.logger.info(f"✅ subtitle_path: {subtitle_path}")

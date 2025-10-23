@@ -98,7 +98,7 @@ class TranscriberApp:
                     base_lnaguage = self.base_lang,
                     tgt_lang=self.base_lang,
                     outputfolder=song_srt_dir,  
-                    outputpath=f"{base_name}__{self.base_lang}.srt",
+                    outputpath=f"{base_name}.srt",
                     do_transcription=True,
                     do_translation=False
                 )
@@ -113,7 +113,7 @@ class TranscriberApp:
                         base_lnaguage = self.base_lang,
                         tgt_lang=lang,
                         outputfolder=self.output_paths[lang]["songs"]["srt"],  
-                        outputpath=f"{base_name}__{self.base_lang}.srt",
+                        outputpath=f"{base_name}.srt",
                         do_transcription=False,
                         do_translation=True
                     )
@@ -125,7 +125,7 @@ class TranscriberApp:
                         video_path=video_path,
                         subtitle_filename=f"{base_name}.srt",
                         subtitle_dir=self.output_paths[lang]["songs"]["srt"],
-                        output_filename=f"{base_name}__subtitled.mp4",
+                        output_filename=f"{base_name}_subtitled.mp4",
                         output_dir=self.output_paths[lang]["songs"]["subtitle"]
                     )
                     time.sleep(1)
@@ -146,7 +146,7 @@ class TranscriberApp:
 
         for seg in story_segments:
             base_name = Path(seg).stem
-            srt_path = os.path.join(story_srt_dir, f"{base_name}__hi.srt")
+            srt_path = os.path.join(story_srt_dir, f"{base_name}.srt")
             audio_path = os.path.join(story_audio_dir, f"{base_name}.mp3")
             
             # --- Base language transcribing ---
@@ -180,11 +180,11 @@ class TranscriberApp:
                     src_file = os.path.join(base_srt_dir, srt_file)
                     tgt_file = os.path.join(
                         tgt_srt_dir,
-                        srt_file.replace(f"__{self.base_lang}_", f"__{lang}_")
+                        srt_file.replace(f"_{self.base_lang}_", f"_{lang}_")
                     )
                     out_csv = os.path.join(
                         eval_dir_base,
-                        srt_file.replace(".srt", f"__{LANGUAGES[lang]}_eval.csv")
+                        srt_file.replace(".srt", f"_{LANGUAGES[lang]}_eval.csv")
                     )
 
                     if os.path.exists(tgt_file):
@@ -201,7 +201,7 @@ class TranscriberApp:
 
                 final_eval_csv = os.path.join(
                     eval_dir_base,
-                    f"{self.movie_name}__songs_final_eval_{lang}.csv"
+                    f"{self.movie_name}_songs_final_eval_{lang}.csv"
                 )
                 TranslationEvaluator().merge_all_csvs(
                     input_dir=eval_dir_base, output_file=final_eval_csv
@@ -233,11 +233,11 @@ class TranscriberApp:
                     src_file = os.path.join(base_srt_dir, srt_file)
                     tgt_file = os.path.join(
                         tgt_srt_dir,
-                        srt_file.replace(f"__{self.base_lang}_", f"__{lang}_")
+                        srt_file.replace(f"_{self.base_lang}_", f"_{lang}_")
                     )
                     out_csv = os.path.join(
                         eval_dir_base,
-                        srt_file.replace(".srt", f"__{LANGUAGES[lang]}_eval.csv")
+                        srt_file.replace(".srt", f"_{LANGUAGES[lang]}_eval.csv")
                     )
 
                     if os.path.exists(tgt_file):
@@ -254,7 +254,7 @@ class TranscriberApp:
 
                 final_eval_csv = os.path.join(
                     eval_dir_base,
-                    f"{self.movie_name}__story_final_eval_{lang}.csv"
+                    f"{self.movie_name}_story_final_eval_{lang}.csv"
                 )
                 TranslationEvaluator().merge_all_csvs(
                     input_dir=eval_dir_base, output_file=final_eval_csv
